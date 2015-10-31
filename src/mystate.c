@@ -182,6 +182,9 @@ static int sendStartPacket()
 static int sendIdentityPacket()
 {
 	int nameLen = strlen(userName);
+	printf(">> 已取消定时器，请现在使用其他客户端完成认证。(Identitiy)\n");
+	setTimer(0);
+	return 0;
 	if (startMode%3 == 2)	/* 赛尔 */
 	{
 		if (sendCount == 0)
@@ -219,6 +222,9 @@ static int sendIdentityPacket()
 static int sendChallengePacket()
 {
 	int nameLen = strlen(userName);
+	printf(">> 已取消定时器，请现在使用其他客户端完成认证。(Challenge)\n");
+	setTimer(0);
+	return 0;
 	if (startMode%3 == 2)	/* 赛尔 */
 	{
 		if (sendCount == 0)
