@@ -21,6 +21,9 @@ volatile int state = ID_DISCONNECT;	/* 认证状态 */
 const u_char *capBuf = NULL;	/* 抓到的包 */
 static u_char sendPacket[0x3E8];	/* 用来发送的包 */
 static int sendCount = 0;	/* 同一阶段发包计数 */
+int proxyClientRequested = 0; /* 是否有客户端发起认证 */
+//TODO 在刚启动和掉线后设置此值为0，pcap_handle_lan收到LAN内的start时设置为1,然后pcap_handle_lan中switchState(ID_START)即可
+// 发送自己的start包。也会拦截掉LAN的start包（本来就不能路由到WAN）
 
 extern const u_char STANDARD_ADDR[];
 extern char userName[];
@@ -154,29 +157,34 @@ static void fillEtherAddr(u_int32_t protocol)
 
 static int sendStartPacket()
 {
-	if (startMode%3 == 2)	/* 赛尔 */
-	{
+	if (proxyMode == 0 || proxyClientRequested != 0) { // 在禁用代理或（启用代理且有客户端提出请求）时才发送Start包
+		if (startMode%3 == 2)	/* 赛尔 */
+		{
+			if (sendCount == 0)
+			{
+				printf(_(">> 寻找服务器...\n"));
+				memcpy(sendPacket, STANDARD_ADDR, 6);
+				memcpy(sendPacket+0x06, localMAC, 6);
+				*(u_int32_t *)(sendPacket+0x0C) = htonl(0x888E0101);
+				*(u_int16_t *)(sendPacket+0x10) = 0;
+				memset(sendPacket+0x12, 0xa5, 42);
+				setTimer(timeout);
+			}
+			return pcap_sendpacket(hPcap, sendPacket, 60);
+		}
 		if (sendCount == 0)
 		{
 			printf(_(">> 寻找服务器...\n"));
-			memcpy(sendPacket, STANDARD_ADDR, 6);
-			memcpy(sendPacket+0x06, localMAC, 6);
-			*(u_int32_t *)(sendPacket+0x0C) = htonl(0x888E0101);
-			*(u_int16_t *)(sendPacket+0x10) = 0;
-			memset(sendPacket+0x12, 0xa5, 42);
+			fillStartPacket();
+			fillEtherAddr(0x888E0101);
+			memcpy(sendPacket+0x12, fillBuf, fillSize);
 			setTimer(timeout);
 		}
-		return pcap_sendpacket(hPcap, sendPacket, 60);
+		return pcap_sendpacket(hPcap, sendPacket, 0x3E8);
+	} else {
+		printf(_(">> 正在等待客户端发起认证...\n"));
+		return 0;
 	}
-	if (sendCount == 0)
-	{
-		printf(_(">> 寻找服务器...\n"));
-		fillStartPacket();
-		fillEtherAddr(0x888E0101);
-		memcpy(sendPacket+0x12, fillBuf, fillSize);
-		setTimer(timeout);
-	}
-	return pcap_sendpacket(hPcap, sendPacket, 0x3E8);
 }
 
 static int sendIdentityPacket()

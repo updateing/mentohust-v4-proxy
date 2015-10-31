@@ -16,6 +16,7 @@
 #include "mystate.h"
 #include "myfunc.h"
 #include "dlfunc.h"
+#include <pthread.h>
 #include <signal.h>
 #include <string.h>
 #include <stdlib.h>
@@ -37,14 +38,20 @@ extern u_int32_t rip, gateway;
 extern u_char gateMAC[];
 #endif
 
+static void* wan_thread(); /* WAN线程，调用pcap_loop */
+static void* lan_thread(); /* LAN线程，调用pcap_loop，仅在代理模式下使用 */
 static void exit_handle(void);	/* 退出回调 */
 static void sig_handle(int sig);	/* 信号回调 */
-static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char *buf);	/* pcap_loop回调 */
+static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char *buf);	/* pcap_loop回调（WAN） */
+static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_char *buf);	/* pcap_loop回调（LAN，仅在代理模式下使用） */
 static void showRuijieMsg(const u_char *buf, unsigned bufLen);	/* 显示锐捷服务器提示信息 */
 static void showCernetMsg(const u_char *buf);	/* 显示赛尔服务器提示信息 */
 
 int main(int argc, char **argv)
 {
+    pthread_t thread_lan, thread_wan;
+    void *retval; // pthread线程的返回值，本程序中没有实际用处
+
 #ifdef ENABLE_NLS
 	textdomain(GETTEXT_PACKAGE);
 	setlocale(LC_ALL, "");
@@ -61,15 +68,44 @@ int main(int argc, char **argv)
 		switchState(ID_DHCP);
 	else
 		switchState(ID_START);	/* 开始认证 */
+	if (proxyMode == 0) {
+		wan_thread(); // 非代理模式，直接执行，不使用多线程
+	} else { // 代理模式，LAN和WAN各一个线程
+		pthread_create(&thread_lan, NULL, lan_thread, 0);
+		pthread_create(&thread_wan, NULL, wan_thread, 0);
+		pthread_join(thread_lan, &retval);
+		pthread_join(thread_wan, &retval);
+	}
+	exit(EXIT_FAILURE);
+}
+
+static void* wan_thread()
+{
+	char* err = proxyMode == 0 ? _("!! 捕获数据包失败，请检查网络连接！\n")
+								: _("!! 从WAN捕获数据包失败，请检查网络连接！\n");
 	if (-1 == pcap_loop(hPcap, -1, pcap_handle, NULL)) { /* 开始捕获数据包 */
-		printf(_("!! 捕获数据包失败，请检查网络连接！\n"));
+		printf(err);
 #ifndef NO_NOTIFY
 		if (showNotify && show_notify(_("MentoHUST - 错误提示"),
-			_("捕获数据包失败，请检查网络连接！"), 1000*showNotify) < 0)
+			err, 1000*showNotify) < 0)
 			showNotify = 0;
 #endif
 	}
-	exit(EXIT_FAILURE);
+	return 0;
+}
+
+static void* lan_thread()
+{
+	char* err = _("!! 从LAN捕获数据包失败，请检查网络连接！\n");
+	if (-1 == pcap_loop(hPcapLan, -1, pcap_handle_lan, NULL)) { /* 开始捕获数据包 */
+		printf(err);
+#ifndef NO_NOTIFY
+		if (showNotify && show_notify(_("MentoHUST - 错误提示"),
+			err, 1000*showNotify) < 0)
+			showNotify = 0;
+#endif
+	}
+	return 0;
 }
 
 static void exit_handle(void)
@@ -78,6 +114,8 @@ static void exit_handle(void)
 		switchState(ID_DISCONNECT);
 	if (hPcap != NULL)
 		pcap_close(hPcap);
+	if (hPcapLan != NULL)
+		pcap_close(hPcapLan);
 	if (fillBuf != NULL)
 		free(fillBuf);
 	if (lockfd > -1)
@@ -110,10 +148,15 @@ static void sig_handle(int sig)
 	else	/* 退出 */
 	{
 		pcap_breakloop(hPcap);
+		if (hPcapLan != NULL) pcap_breakloop(hPcapLan);
 		exit(EXIT_SUCCESS);
 	}
 }
 
+static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_char *buf)
+{
+// TODO
+}
 static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char *buf)
 {
 	static unsigned failCount = 0;
