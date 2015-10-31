@@ -61,7 +61,7 @@ extern u_char version[];	/* 版本 */
 char userName[ACCOUNT_SIZE] = "";	/* 用户名 */
 char password[ACCOUNT_SIZE] = "";	/* 密码 */
 char nic[NIC_SIZE] = "";	/* 发出认证数据包的网卡名（WAN） */
-char nic_lan[NIC_SIZE] = "";	/* 监听认证数据包的网卡名（LAN，仅在代理模式下使用） */
+char nicLan[NIC_SIZE] = "";	/* 监听认证数据包的网卡名（LAN，仅在代理模式下使用） */
 char dataFile[MAX_PATH] = "";	/* 数据文件 */
 char dhcpScript[MAX_PATH] = "";	/* DHCP脚本 */
 u_int32_t ip = 0;	/* 本机IP */
@@ -69,7 +69,7 @@ u_int32_t mask = 0;	/* 子网掩码 */
 u_int32_t gateway = 0;	/* 网关 */
 u_int32_t dns = 0;	/* DNS */
 u_int32_t pingHost = 0;	/* ping */
-u_char localMAC[6];	/* 本机MAC */
+u_char localMAC[6];	/* 本机MAC（WAN） */
 u_char destMAC[6];	/* 服务器MAC */
 unsigned timeout = D_TIMEOUT;	/* 超时间隔 */
 unsigned echoInterval = D_ECHOINTERVAL;	/* 心跳间隔 */
@@ -79,7 +79,7 @@ unsigned dhcpMode = D_DHCPMODE;	/* DHCP模式 */
 unsigned maxFail = D_MAXFAIL;	/* 允许失败次数 */
 unsigned proxyMode = D_PROXYMODE;	/* 代理模式开关 */
 pcap_t *hPcap = NULL;	/* 用于发出认证数据包的Pcap句柄（WAN） */
-pcap_t *hPcap_lan = NULL;	/* 用于监听认证数据包的Pcap句柄（LAN，仅在代理模式下使用） */
+pcap_t *hPcapLan = NULL;	/* 用于监听认证数据包的Pcap句柄（LAN，仅在代理模式下使用） */
 int lockfd = -1;	/* 锁文件描述符 */
 
 static int readFile(int *daemonMode);	/* 读取配置文件来初始化 */
@@ -237,7 +237,7 @@ void initConfig(int argc, char **argv)
 			exit(EXIT_FAILURE);
 		}
 	}
-	if (userName[0]=='\0' || password[0]=='\0')	/* 未写用户名密码？ */
+	if (proxyMode == 0 && (userName[0]=='\0' || password[0]=='\0'))	/* 不使用代理时，未写用户名密码？ */
 	{
 		saveFlag = 1;
 		printf(_("?? 请输入用户名: "));
@@ -414,7 +414,7 @@ static void readArg(char argc, char **argv, int *saveFlag, int *exitFlag, int *d
 			else if (c == 'x')
 				proxyMode = 1;
 			else if (c == 't')
-				strncpy(nic_lan, str+2, sizeof(nic_lan)-1);
+				strncpy(nicLan, str+2, sizeof(nicLan)-1);
 		}
 	}
 }
@@ -504,9 +504,15 @@ static void printConfig()
 {
 	char *addr[] = {_("标准"), _("锐捷"), _("赛尔")};
 	char *dhcp[] = {_("不使用"), _("二次认证"), _("认证后"), _("认证前")};
-	printf(_("** 用户名:\t%s\n"), userName);
-	/* printf("** 密码:\t%s\n", password); */
-	printf(_("** 网卡: \t%s\n"), nic);
+	if (proxyMode == 0) {
+		printf(_("** 用户名:\t%s\n"), userName);
+		/* printf("** 密码:\t%s\n", password); */
+		printf(_("** 网卡: \t%s\n"), nic);
+	} else {
+		printf(_("** 已启用代理模式\n"));
+		printf(_("** WAN网卡: \t%s\n"), nic);
+		printf(_("** LAN网卡: \t%s\n"), nicLan);
+	}
 	if (gateway)
 		printf(_("** 网关地址:\t%s\n"), formatIP(gateway));
 	if (dns)
@@ -536,7 +542,14 @@ static int openPcap()
 	struct bpf_program fcode;
 	if ((hPcap = pcap_open_live(nic, 2048, startMode >= 3  , 1000, buf)) == NULL)
 	{
-		printf(_("!! 打开网卡%s失败: %s\n"), nic, buf);
+		printf(proxyMode == 0 ? _("!! 打开网卡%s失败: %s\n") : _("!! 打开WAN网卡%s失败: %s\n")
+				, nic, buf);
+		return -1;
+	}
+	// TODO 在LAN接口上暂时强制使用混杂模式
+	if (proxyMode != 0 && ((hPcapLan = pcap_open_live(nicLan, 2048, 1, 1000, buf)) == NULL))
+	{
+		printf(_("!! 打开LAN网卡%s失败: %s\n"), nicLan, buf);
 		return -1;
 	}
 	fmt = formatHex(localMAC, 6);
