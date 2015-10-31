@@ -22,8 +22,7 @@ const u_char *capBuf = NULL;	/* 抓到的包 */
 static u_char sendPacket[0x3E8];	/* 用来发送的包 */
 static int sendCount = 0;	/* 同一阶段发包计数 */
 int proxyClientRequested = 0; /* 是否有客户端发起认证 */
-//TODO 在刚启动和掉线后设置此值为0，pcap_handle_lan收到LAN内的start时设置为1,然后pcap_handle_lan中switchState(ID_START)即可
-// 发送自己的start包。也会拦截掉LAN的start包（本来就不能路由到WAN）
+int proxySuccessCount = 0; /* 目前收到认证成功的次数 */
 
 extern const u_char STANDARD_ADDR[];
 extern char userName[];
@@ -38,6 +37,7 @@ extern pcap_t *hPcap;
 extern u_char *fillBuf;
 extern unsigned fillSize;
 extern u_int32_t pingHost;
+extern unsigned proxyMode;
 #ifndef NO_ARP
 extern u_int32_t rip, gateway;
 extern u_char gateMAC[];
@@ -183,6 +183,7 @@ static int sendStartPacket()
 		return pcap_sendpacket(hPcap, sendPacket, 0x3E8);
 	} else {
 		printf(_(">> 正在等待客户端发起认证...\n"));
+		sendCount = -1; // 假装没有发送过start，以免持续等待
 		return 0;
 	}
 }
@@ -190,9 +191,6 @@ static int sendStartPacket()
 static int sendIdentityPacket()
 {
 	int nameLen = strlen(userName);
-	printf(">> 已取消定时器，请现在使用其他客户端完成认证。(Identitiy)\n");
-	setTimer(0);
-	return 0;
 	if (startMode%3 == 2)	/* 赛尔 */
 	{
 		if (sendCount == 0)
@@ -230,9 +228,6 @@ static int sendIdentityPacket()
 static int sendChallengePacket()
 {
 	int nameLen = strlen(userName);
-	printf(">> 已取消定时器，请现在使用其他客户端完成认证。(Challenge)\n");
-	setTimer(0);
-	return 0;
 	if (startMode%3 == 2)	/* 赛尔 */
 	{
 		if (sendCount == 0)

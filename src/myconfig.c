@@ -37,7 +37,8 @@ static const char *PACKAGE_BUGREPORT = "http://code.google.com/p/mentohust/issue
 #define D_DHCPMODE			0	/* 默认DHCP模式 */
 #define D_DAEMONMODE		0	/* 默认daemon模式 */
 #define D_MAXFAIL			8	/* 默认允许失败次数 */
-#define D_PROXYMODE     0   /* 默认禁用代理模式 */
+#define D_PROXYMODE     	0	/* 默认禁用代理模式 */
+#define D_SUCCESS_COUNT    	1	/* 默认代理需求成功次数 */
 
 #define ECHOFLAGS (ECHO|ECHOE|ECHOK|ECHONL)    /* 控制台输入密码时的模式*/
 
@@ -70,6 +71,7 @@ u_int32_t gateway = 0;	/* 网关 */
 u_int32_t dns = 0;	/* DNS */
 u_int32_t pingHost = 0;	/* ping */
 u_char localMAC[6];	/* 本机MAC（WAN） */
+u_char clientMAC[6];	/* 当前正在认证的客户端MAC，仅在代理模式下使用 */
 u_char destMAC[6];	/* 服务器MAC */
 unsigned timeout = D_TIMEOUT;	/* 超时间隔 */
 unsigned echoInterval = D_ECHOINTERVAL;	/* 心跳间隔 */
@@ -78,6 +80,7 @@ unsigned startMode = D_STARTMODE;	/* 组播模式 */
 unsigned dhcpMode = D_DHCPMODE;	/* DHCP模式 */
 unsigned maxFail = D_MAXFAIL;	/* 允许失败次数 */
 unsigned proxyMode = D_PROXYMODE;	/* 代理模式开关 */
+unsigned proxyRequireSuccessCount = D_SUCCESS_COUNT; /* 关闭监听前需要收到的Success次数 */
 pcap_t *hPcap = NULL;	/* 用于发出认证数据包的Pcap句柄（WAN） */
 pcap_t *hPcapLan = NULL;	/* 用于监听认证数据包的Pcap句柄（LAN，仅在代理模式下使用） */
 int lockfd = -1;	/* 锁文件描述符 */
@@ -239,7 +242,7 @@ void initConfig(int argc, char **argv)
 	}
 	if (proxyMode != 0 && nicLan[0] == '\0')
 	{
-		printf(_("!! 代理模式下必须在命令行上指定LAN网卡（-t）！"));
+		printf(_("!! 代理模式下必须在命令行上指定LAN网卡（-z）！\n"));
 		exit(EXIT_FAILURE);
 	}
 	if (proxyMode == 0 && (userName[0]=='\0' || password[0]=='\0'))	/* 不使用代理时，未写用户名密码？ */
@@ -365,7 +368,9 @@ static void readArg(char argc, char **argv, int *saveFlag, int *exitFlag, int *d
 				*exitFlag = 1;
 				return;
 			}
-		} else if (strlen(str) > 2) {
+		} else if (c == 'x')
+			proxyMode = 1;
+		else if (strlen(str) > 2) {
 			if (c == 'u')
 				strncpy(userName, str+2, sizeof(userName)-1);
 			else if (c == 'p')
@@ -416,10 +421,12 @@ static void readArg(char argc, char **argv, int *saveFlag, int *exitFlag, int *d
 				*daemonMode = atoi(str+2) % 4;
 			else if (c == 'l')
 				maxFail = atoi(str+2);
-			else if (c == 'x')
-				proxyMode = 1;
-			else if (c == 't')
+			else if (c == 'z')
 				strncpy(nicLan, str+2, sizeof(nicLan)-1);
+			else if (c == 'j')
+				proxyRequireSuccessCount = atoi(str+2);
+			else
+				printf(_("!! 未知选项: %s\n"), str);
 		}
 	}
 }
@@ -453,10 +460,11 @@ static void showHelp(const char *fileName)
 		"\t-f 自定义数据文件[默认不使用]\n"
 		"\t-c DHCP脚本[默认dhclient]\n"
 		"\t-x 开启认证代理模式\n"
-		"\t-t 认证代理模式下监听认证数据包的网卡名\n"
+		"\t-z 认证代理模式下监听认证数据包的网卡名\n"
+		"\t-j 认证代理模式下关闭LAN监听线程前需要收到的Success包次数 [默认1]\n"
 		"\t-q 显示SuConfig.dat的内容(如-q/path/SuConfig.dat)\n"
 		"例如:\t%s -uusername -ppassword -neth0 -i192.168.0.1 -m255.255.255.0 -g0.0.0.0 -s0.0.0.0 -o0.0.0.0 -t8 -e30 -r15 -a0 -d1 -b0 -v4.10 -fdefault.mpf -cdhclient\n"
-		"关于代理模式：此模式下MentoHUST将不会自己发起认证，而是修改LAN内捕获到的认证数据包的MAC并转发至WAN，使得本机认证通过。需同时指定LAN端口（-t），可不指定用户名和密码（-u和-p）\n"
+		"关于代理模式：此模式下MentoHUST将不会自己发起认证，而是修改LAN内捕获到的认证数据包的MAC并转发至WAN，使得本机认证通过。需同时指定LAN端口（-z），可不指定用户名和密码（-u和-p）\n"
 		"注意：使用时请确保是以root权限运行！\n\n");
 	printf(helpString, fileName, fileName);
 	//cancel the registered funciton:atexit(exit_handle)
@@ -517,6 +525,7 @@ static void printConfig()
 		printf(_("** 已启用代理模式\n"));
 		printf(_("** WAN网卡: \t%s\n"), nic);
 		printf(_("** LAN网卡: \t%s\n"), nicLan);
+		printf(_("** 成功次数要求: \t%d\n"), proxyRequireSuccessCount);
 	}
 	if (gateway)
 		printf(_("** 网关地址:\t%s\n"), formatIP(gateway));
@@ -572,6 +581,16 @@ static int openPcap()
 		return -1;
 	}
 	pcap_freecode(&fcode);
+	if (proxyMode != 0) {
+		strcpy(buf, "ether proto 0x888e");
+		if (pcap_compile(hPcapLan, &fcode, buf, 0, 0xffffffff) == -1
+				|| pcap_setfilter(hPcapLan, &fcode) == -1)
+		{
+			printf(_("!! 为LAN设置pcap过滤器失败: %s\n"), pcap_geterr(hPcapLan));
+			return -1;
+		}
+		pcap_freecode(&fcode);
+	}
 	return 0;
 }
 

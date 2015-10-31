@@ -16,6 +16,7 @@
 #include "mystate.h"
 #include "myfunc.h"
 #include "dlfunc.h"
+#include "packet_const.h"
 #include <pthread.h>
 #include <signal.h>
 #include <string.h>
@@ -23,12 +24,13 @@
 #include <netinet/in.h>
 #include <unistd.h>
 
-extern pcap_t *hPcap;
+extern pcap_t *hPcap, *hPcapLan;
 extern volatile int state;
 extern u_char *fillBuf;
 extern const u_char *capBuf;
 extern unsigned startMode, dhcpMode, maxFail;
-extern u_char destMAC[];
+extern unsigned proxyMode, proxyClientRequested, proxySuccessCount, proxyRequireSuccessCount;
+extern u_char destMAC[], localMAC[], clientMAC[];
 extern int lockfd;
 #ifndef NO_NOTIFY
 extern int showNotify;
@@ -84,7 +86,7 @@ static void* wan_thread()
 	char* err = proxyMode == 0 ? _("!! 捕获数据包失败，请检查网络连接！\n")
 								: _("!! 从WAN捕获数据包失败，请检查网络连接！\n");
 	if (-1 == pcap_loop(hPcap, -1, pcap_handle, NULL)) { /* 开始捕获数据包 */
-		printf(err);
+		printf("%s", err);
 #ifndef NO_NOTIFY
 		if (showNotify && show_notify(_("MentoHUST - 错误提示"),
 			err, 1000*showNotify) < 0)
@@ -98,7 +100,7 @@ static void* lan_thread()
 {
 	char* err = _("!! 从LAN捕获数据包失败，请检查网络连接！\n");
 	if (-1 == pcap_loop(hPcapLan, -1, pcap_handle_lan, NULL)) { /* 开始捕获数据包 */
-		printf(err);
+		printf("%s", err);
 #ifndef NO_NOTIFY
 		if (showNotify && show_notify(_("MentoHUST - 错误提示"),
 			err, 1000*showNotify) < 0)
@@ -155,11 +157,78 @@ static void sig_handle(int sig)
 
 static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_char *buf)
 {
-// TODO
+	PACKET_HEADER* hdr = (PACKET_HEADER*)buf;
+	u_char* mod_buf; // 修改MAC后的包
+	int char_to_int;
+
+#ifndef NO_ARP
+	if (ntohs(*(unsigned short*)(hdr->eth_hdr.protocol)) == 0x888e) {
+#endif
+		if (memcmp(clientMAC, "\0\0\0\0\0\0", 6) == 0) { // 没有存下客户端MAC地址，表明尚未有客户端开始认证
+			if (hdr->eapol_hdr.type == EAPOL_START) { // 接收到客户端的Start包，本次认证中锁定此MAC地址
+				memcpy(clientMAC, buf + 6, 6);
+				printf(_(">> 客户端%s正在发起认证\n"), formatHex(clientMAC, 6));
+				proxyClientRequested = 1; // 在switchState后将由MentoHUST发出Start包
+				switchState(ID_START);
+			} else { // 尚未开始认证时收到了其他类型的数据包，表明认证流程错误
+				printf(_("!! 客户端的Start包丢失，将重启认证！\n"));
+				proxyClientRequested = 0;
+				switchState(ID_START);
+			}
+		} else { // 已有认证在进行中
+			if (memcmp(clientMAC, hdr->eth_hdr.src_mac, 6) == 0) {
+				switch (char_to_int = hdr->eapol_hdr.type) { // 以下switch是为了分类型处理各个包
+				case EAPOL_START:
+					if (proxySuccessCount >= proxyRequireSuccessCount) {
+						printf(_("!! 客户端在认证完成后发送Start包，忽略\n"));
+						return;
+					} else {
+						printf(_(">> 客户端%s正在发起认证\n"), formatHex(clientMAC, 6));
+						switchState(ID_START);
+					}
+					break;
+				case EAPOL_LOGOFF:
+					printf(_("!! 客户端要求断开认证，将忽略此请求\n"));
+					return;
+				case EAP_PACKET:
+					switch (char_to_int = hdr->eap_hdr.code) {
+					case EAP_REQUEST:
+					case EAP_SUCCESS:
+					case EAP_FAILURE:
+						return;
+					case EAP_RESPONSE:
+						switch (char_to_int = hdr->eap_hdr.type) {
+						case IDENTITY:
+							printf(_(">> 客户端已发送用户名\n"));
+							break;
+						case MD5_CHALLENGE:
+							printf(_(">> 客户端已发送密码\n"));
+							break;
+						}
+					}
+				}
+				mod_buf = malloc(h->len);
+				memcpy(mod_buf, buf, h->len);
+				memcpy(mod_buf + 6, localMAC, 6); // 将客户端发来的数据包中源MAC改为本设备的
+				pcap_sendpacket(hPcap, mod_buf, h->len);
+				free(mod_buf);
+			} else {
+				printf(_("!! 认证流程受到来自%s的干扰！\n"), formatHex(hdr->eth_hdr.src_mac, 6));
+			}
+		}
+#ifndef NO_ARP
+	}
+#endif
+	return;
 }
+
 static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char *buf)
 {
 	static unsigned failCount = 0;
+	u_char* mod_buf;
+    pthread_t thread_lan;
+    //void *retval; // pthread线程的返回值，本程序中没有实际用处
+
 #ifndef NO_ARP
 	if (buf[0x0c]==0x88 && buf[0x0d]==0x8e) {
 #endif
@@ -167,20 +236,64 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 			return;
 		capBuf = buf;
 		if (buf[0x0F]==0x00 && buf[0x12]==0x01 && buf[0x16]==0x01) {	/* 验证用户名 */
-			if (startMode < 3) {
-				memcpy(destMAC, buf+6, 6);
-				printf(_("** 认证MAC:\t%s\n"), formatHex(destMAC, 6));
-				startMode += 3;	/* 标记为已获取 */
+			if (proxyMode == 0) {
+				if (startMode < 3) {
+					memcpy(destMAC, buf+6, 6);
+					printf(_("** 认证MAC:\t%s\n"), formatHex(destMAC, 6));
+					startMode += 3;	/* 标记为已获取 */
+				}
+				if (startMode==3 && memcmp(buf+0x17, "User name", 9)==0)	/* 塞尔 */
+					startMode = 5;
+				switchState(ID_IDENTITY);
+			} else {
+				if (proxyClientRequested == 1) {
+					printf(_(">> 服务器已请求用户名\n"));
+					mod_buf = malloc(h->len);
+					memcpy(mod_buf, buf, h->len);
+					memcpy(mod_buf, clientMAC, 6); // 把目标MAC改为客户端
+					pcap_sendpacket(hPcapLan, mod_buf, h->len);
+					free(mod_buf);
+				} else {
+					printf(_("!! 在代理认证完成后收到用户名请求，将重启认证！\n"));
+					switchState(ID_START);
+				}
 			}
-			if (startMode==3 && memcmp(buf+0x17, "User name", 9)==0)	/* 塞尔 */
-				startMode = 5;
-			switchState(ID_IDENTITY);
 		}
-		else if (buf[0x0F]==0x00 && buf[0x12]==0x01 && buf[0x16]==0x04)	/* 验证密码 */
-			switchState(ID_CHALLENGE);
+		else if (buf[0x0F]==0x00 && buf[0x12]==0x01 && buf[0x16]==0x04)	{ /* 验证密码 */
+			if (proxyMode ==0) {
+				switchState(ID_CHALLENGE);
+			} else {
+				if (proxyClientRequested == 1) {
+					printf(_(">> 服务器已请求密码\n"));
+					mod_buf = malloc(h->len);
+					memcpy(mod_buf, buf, h->len);
+					memcpy(mod_buf, clientMAC, 6); // 把目标MAC改为客户端
+					pcap_sendpacket(hPcapLan, mod_buf, h->len);
+					free(mod_buf);
+				} else {
+					printf(_("!! 在代理认证完成后收到密码请求，将重启认证！\n"));
+					switchState(ID_START);
+				}
+			}
+		}
 		else if (buf[0x0F]==0x00 && buf[0x12]==0x03) {	/* 认证成功 */
 			printf(_(">> 认证成功!\n"));
 			failCount = 0;
+			proxySuccessCount++;
+			if (proxyMode != 0) {
+				mod_buf = malloc(h->len);
+				memcpy(mod_buf, buf, h->len);
+				memcpy(mod_buf, clientMAC, 6); // 把目标MAC改为客户端
+				pcap_sendpacket(hPcapLan, mod_buf, h->len); // 让目标知道认证已成功
+				free(mod_buf);
+				if (proxySuccessCount >= proxyRequireSuccessCount) {
+					pcap_breakloop(hPcapLan);
+					proxyClientRequested = 0;
+					proxySuccessCount = 0;
+					memset(clientMAC, 0, 6); // 重设MAC地址，以备下次使用不同客户端认证用
+					printf(_(">> 已关闭LAN监听线程\n"));
+				}
+			}
 			if (!(startMode%3 == 2)) {
 				getEchoKey(buf);
 				showRuijieMsg(buf, h->caplen);
@@ -198,7 +311,13 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 			switchState(ID_ECHO);
 		else if (buf[0x0F]==0x00 && buf[0x12]==0x04) {  /* 认证失败或被踢下线 */
 			if (state==ID_WAITECHO || state==ID_ECHO) {
-				printf(_(">> 认证掉线，开始重连!\n"));
+				if (proxyMode == 0) {
+					printf(_(">> 认证掉线，开始重连!\n"));
+				} else {
+					pthread_create(&thread_lan, NULL, lan_thread, 0);
+					//pthread_join(thread_lan, &retval);
+					printf(_(">> 认证掉线，已重新启用对LAN的监听\n"));
+				}
 				switchState(ID_START);
 			}
 			else if (buf[0x1b]!=0 || startMode%3==2) {
