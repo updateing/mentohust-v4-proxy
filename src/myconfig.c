@@ -37,6 +37,7 @@ static const char *PACKAGE_BUGREPORT = "http://code.google.com/p/mentohust/issue
 #define D_DHCPMODE			0	/* 默认DHCP模式 */
 #define D_DAEMONMODE		0	/* 默认daemon模式 */
 #define D_MAXFAIL			8	/* 默认允许失败次数 */
+#define D_PROXYMODE     0   /* 默认禁用代理模式 */
 
 #define ECHOFLAGS (ECHO|ECHOE|ECHOK|ECHONL)    /* 控制台输入密码时的模式*/
 
@@ -59,7 +60,8 @@ extern int bufType;	/*0内置xrgsu 1内置Win 2仅文件 3文件+校验*/
 extern u_char version[];	/* 版本 */
 char userName[ACCOUNT_SIZE] = "";	/* 用户名 */
 char password[ACCOUNT_SIZE] = "";	/* 密码 */
-char nic[NIC_SIZE] = "";	/* 网卡名 */
+char nic[NIC_SIZE] = "";	/* 发出认证数据包的网卡名（WAN） */
+char nic_lan[NIC_SIZE] = "";	/* 监听认证数据包的网卡名（LAN，仅在代理模式下使用） */
 char dataFile[MAX_PATH] = "";	/* 数据文件 */
 char dhcpScript[MAX_PATH] = "";	/* DHCP脚本 */
 u_int32_t ip = 0;	/* 本机IP */
@@ -75,7 +77,9 @@ unsigned restartWait = D_RESTARTWAIT;	/* 失败等待 */
 unsigned startMode = D_STARTMODE;	/* 组播模式 */
 unsigned dhcpMode = D_DHCPMODE;	/* DHCP模式 */
 unsigned maxFail = D_MAXFAIL;	/* 允许失败次数 */
-pcap_t *hPcap = NULL;	/* Pcap句柄 */
+unsigned proxyMode = D_PROXYMODE;	/* 代理模式开关 */
+pcap_t *hPcap = NULL;	/* 用于发出认证数据包的Pcap句柄（WAN） */
+pcap_t *hPcap_lan = NULL;	/* 用于监听认证数据包的Pcap句柄（LAN，仅在代理模式下使用） */
 int lockfd = -1;	/* 锁文件描述符 */
 
 static int readFile(int *daemonMode);	/* 读取配置文件来初始化 */
@@ -407,6 +411,10 @@ static void readArg(char argc, char **argv, int *saveFlag, int *exitFlag, int *d
 				*daemonMode = atoi(str+2) % 4;
 			else if (c == 'l')
 				maxFail = atoi(str+2);
+			else if (c == 'x')
+				proxyMode = 1;
+			else if (c == 't')
+				strncpy(nic_lan, str+2, sizeof(nic_lan)-1);
 		}
 	}
 }
@@ -439,8 +447,11 @@ static void showHelp(const char *fileName)
 		"\t-v 客户端版本号[默认0.00表示兼容xrgsu]\n"
 		"\t-f 自定义数据文件[默认不使用]\n"
 		"\t-c DHCP脚本[默认dhclient]\n"
+		"\t-x 开启认证代理模式\n"
+		"\t-t 认证代理模式下监听认证数据包的网卡名\n"
 		"\t-q 显示SuConfig.dat的内容(如-q/path/SuConfig.dat)\n"
 		"例如:\t%s -uusername -ppassword -neth0 -i192.168.0.1 -m255.255.255.0 -g0.0.0.0 -s0.0.0.0 -o0.0.0.0 -t8 -e30 -r15 -a0 -d1 -b0 -v4.10 -fdefault.mpf -cdhclient\n"
+		"关于代理模式：此模式下MentoHUST将不会自己发起认证，而是修改LAN内捕获到的认证数据包的MAC并转发至WAN，使得本机认证通过。需同时指定LAN端口（-t），可不指定用户名和密码（-u和-p）\n"
 		"注意：使用时请确保是以root权限运行！\n\n");
 	printf(helpString, fileName, fileName);
 	//cancel the registered funciton:atexit(exit_handle)
