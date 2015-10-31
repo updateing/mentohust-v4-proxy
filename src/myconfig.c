@@ -237,6 +237,11 @@ void initConfig(int argc, char **argv)
 			exit(EXIT_FAILURE);
 		}
 	}
+	if (proxyMode != 0 && nicLan[0] == '\0')
+	{
+		printf(_("!! 代理模式下必须在命令行上指定LAN网卡（-t）！"));
+		exit(EXIT_FAILURE);
+	}
 	if (proxyMode == 0 && (userName[0]=='\0' || password[0]=='\0'))	/* 不使用代理时，未写用户名密码？ */
 	{
 		saveFlag = 1;
