@@ -368,8 +368,7 @@ static void readArg(char argc, char **argv, int *saveFlag, int *exitFlag, int *d
 				*exitFlag = 1;
 				return;
 			}
-		} else if (c == 'x')
-			proxyMode = 1;
+		}
 		else if (strlen(str) > 2) {
 			if (c == 'u')
 				strncpy(userName, str+2, sizeof(userName)-1);
@@ -421,8 +420,10 @@ static void readArg(char argc, char **argv, int *saveFlag, int *exitFlag, int *d
 				*daemonMode = atoi(str+2) % 4;
 			else if (c == 'l')
 				maxFail = atoi(str+2);
-			else if (c == 'z')
+			else if (c == 'z') {
+				proxyMode = 1;
 				strncpy(nicLan, str+2, sizeof(nicLan)-1);
+			}
 			else if (c == 'j')
 				proxyRequireSuccessCount = atoi(str+2);
 			else
@@ -459,14 +460,14 @@ static void showHelp(const char *fileName)
 		"\t-v 客户端版本号[默认0.00表示兼容xrgsu]\n"
 		"\t-f 自定义数据文件[默认不使用]\n"
 		"\t-c DHCP脚本[默认dhclient]\n"
-		"\t-x 开启认证代理模式\n"
-		"\t-z 认证代理模式下监听认证数据包的网卡名\n"
+		"\t-z 认证代理模式下监听认证数据包的网卡名（设置此项即表示开启代理模式）\n"
 		"\t-j 认证代理模式下关闭LAN监听线程前需要收到的Success包次数 [默认1]\n"
 		"\t-q 显示SuConfig.dat的内容(如-q/path/SuConfig.dat)\n"
 		"例如:\t%s -uusername -ppassword -neth0 -i192.168.0.1 -m255.255.255.0 -g0.0.0.0 -s0.0.0.0 -o0.0.0.0 -t8 -e30 -r15 -a0 -d1 -b0 -v4.10 -fdefault.mpf -cdhclient\n"
-		"关于代理模式：此模式下MentoHUST将不会自己发起认证，而是修改LAN内捕获到的认证数据包的MAC并转发至WAN，使得本机认证通过。需同时指定LAN端口（-z），可不指定用户名和密码（-u和-p）\n"
+		"关于代理模式：此模式下MentoHUST将不会自己发起认证，而是修改LAN内捕获到的认证数据包的源MAC并转发至WAN，使得本机认证通过。此模式下用户名和密码（-u和-p）无效，可不指定。\n"
+		"代理模式示例:\t%s -zeth1 -neth0 -a1 -d2 -j2\n"
 		"注意：使用时请确保是以root权限运行！\n\n");
-	printf(helpString, fileName, fileName);
+	printf(helpString, fileName, fileName, fileName);
 	//cancel the registered funciton:atexit(exit_handle)
 	exit(EXIT_SUCCESS);
 }
