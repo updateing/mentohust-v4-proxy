@@ -39,6 +39,8 @@ const u_char STANDARD_ADDR[] = {0x01,0x80,0xC2,0x00,0x00,0x03};
 const u_char RUIJIE_ADDR[] = {0x01,0xD0,0xF8,0x00,0x00,0x03};
 static const char *DATAFILE = "/etc/mentohust/";	/* 默认数据文件(目录) */
 
+/* Frame (527 bytes) */
+
 static int dataOffset;	/* 抓包偏移 */
 static u_int32_t echoKey = 0, echoNo = 0;	/* Echo阶段所需 */
 u_char *fillBuf = NULL;	/* 填充包地址 */
@@ -174,7 +176,7 @@ void newBuffer()
 	getVersion();
 	if (checkFile() == 0)
 		bufType += 2;
-	else fillSize = (bufType==0 ? 0x80 : 0x1d7);
+	else fillSize = 0x1fd;//fillSize = (bufType==0 ? 0x80 : 0x1d7);
 	fillBuf = (u_char *)malloc(fillSize);
 }
 
@@ -380,9 +382,9 @@ static int readPacket(int type)
 fileError:
 	printf(_("!! 所选文件%s无效，改用内置数据认证。\n"), dataFile);
 	bufType -= 2;
-	if (bufType==1 && fillSize<0x1d7) {
+	if (bufType==1 && fillSize<0x1f7) {
 		free(fillBuf);
-		fillSize = 0x1d7;
+		fillSize = 0x1f7;
 		fillBuf = (u_char *)malloc(fillSize);
 	}
 	return -1;
@@ -436,7 +438,10 @@ void fillStartPacket()
 			memcpy(fillBuf+0x17, packet1, sizeof(packet1));
 			memcpy(fillBuf+0x3b, version, 2);
 		} else
-			memcpy(fillBuf+0x17, packet0, sizeof(packet0));
+                {
+                 //   memcpy(fillBuf, pkt1, sizeof(pkt1));
+                    memcpy(fillBuf+0x17, packet0, sizeof(packet0));
+                }
 		setProperty(0x18, dhcp, 1);
 		setProperty(0x2D, localMAC, 6);
 	}
@@ -494,10 +499,11 @@ void fillEchoPacket(u_char *echoBuf)
 void getEchoKey(const u_char *capBuf)
 {
 	int i, offset = 0x1c+capBuf[0x1b]+0x69+24;	/* 通过比较了大量抓包，通用的提取点就是这样的 */
-	u_char *base = (u_char *)(&echoKey);
+	u_char *base;
+	echoKey = ntohl(*(u_int32_t *)(capBuf+offset));
+	base = (u_char *)(&echoKey);
 	for (i=0; i<4; i++)
-		base[i] = encode(capBuf[offset+i]);
-	echoKey = ntohl(echoKey);
+		base[i] = encode(base[i]);
 }
 
 u_char *checkPass(u_char id, const u_char *md5Seed, int seedLen)

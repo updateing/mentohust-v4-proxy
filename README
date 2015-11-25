@@ -1,9 +1,18 @@
 开发说明
 ========
-接续HustMoon开发的MentoHUST，继续更新。
-搬运完毕，即将开始各种修改。记下原始的地址以示纪念： http://mentohust.googlecode.com/
+本项目最初来源于HustLion的fork：
+>接续HustMoon开发的MentoHUST，继续更新。
+>搬运完毕，即将开始各种修改。记下原始的地址以示纪念： http://mentohust.googlecode.com/
+>
+>开发的主要目标是使得OpenWRT下的MentoHUST更加友好，对其他平台的适配暂无计划。
 
-开发的主要目标是使得OpenWRT下的MentoHUST更加友好，对其他平台的适配暂无计划。
+V4认证算法来源于hyrathb：
+>完全没怎么看原来的代码，瞎改的。
+>加入了V4支持。具体算法看checkV4.c
+>
+>所有hash都是从算法在rhash和ampheck借来魔改的……。
+
+代理认证由updateing实现。
 
 使用方法
 ========
