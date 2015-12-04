@@ -51,7 +51,7 @@ static void showCernetMsg(const u_char *buf);	/* 显示赛尔服务器提示信�
 
 int main(int argc, char **argv)
 {
-    pthread_t thread_lan, thread_wan;
+    pthread_t thread_lan;
     void *retval; // pthread线程的返回值，本程序中没有实际用处
 
 #ifdef ENABLE_NLS
@@ -72,11 +72,10 @@ int main(int argc, char **argv)
 		switchState(ID_START);	/* 开始认证 */
 	if (proxyMode == 0) {
 		wan_thread(); // 非代理模式，直接执行，不使用多线程
-	} else { // 代理模式，LAN和WAN各一个线程
+	} else { // 代理模式，为LAN多开一个线程
+		wan_thread();
 		pthread_create(&thread_lan, NULL, lan_thread, 0);
-		pthread_create(&thread_wan, NULL, wan_thread, 0);
 		pthread_join(thread_lan, &retval);
-		pthread_join(thread_wan, &retval);
 	}
 	exit(EXIT_FAILURE);
 }
