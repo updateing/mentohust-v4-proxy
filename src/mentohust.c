@@ -315,7 +315,12 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 				} else {
 					pthread_create(&thread_lan, NULL, lan_thread, 0);
 					//pthread_join(thread_lan, &retval);
-					printf(_(">> 认证掉线，已重新启用对LAN的监听\n"));
+					printf(_(">> 认证掉线，已发回客户端并重新启用对LAN的监听\n"));
+					mod_buf = malloc(h->len);
+					memcpy(mod_buf, buf, h->len);
+					memcpy(mod_buf, clientMAC, 6);
+					pcap_sendpacket(hPcapLan, mod_buf, h->len);
+					free(mod_buf);
 				}
 				switchState(ID_START);
 			}
