@@ -30,7 +30,7 @@ extern u_char *fillBuf;
 extern const u_char *capBuf;
 extern unsigned startMode, dhcpMode, maxFail;
 extern unsigned proxyMode, proxyClientRequested, proxySuccessCount, proxyRequireSuccessCount;
-extern u_char destMAC[], localMAC[], clientMAC[];
+extern u_char destMAC[], localMAC[], clientMAC[], lastSuccessClientMAC[];
 extern int lockfd;
 #ifndef NO_NOTIFY
 extern int showNotify;
@@ -289,6 +289,7 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 					pcap_breakloop(hPcapLan);
 					proxyClientRequested = 0;
 					proxySuccessCount = 0;
+					memcpy(lastSuccessClientMAC, clientMAC, 6); // 备份本次认证成功的客户端MAC，用于通知掉线
 					memset(clientMAC, 0, 6); // 重设MAC地址，以备下次使用不同客户端认证用
 					printf(_(">> 已关闭LAN监听线程\n"));
 				}
@@ -314,11 +315,10 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 					printf(_(">> 认证掉线，开始重连!\n"));
 				} else {
 					pthread_create(&thread_lan, NULL, lan_thread, 0);
-					//pthread_join(thread_lan, &retval);
 					printf(_(">> 认证掉线，已发回客户端并重新启用对LAN的监听\n"));
 					mod_buf = malloc(h->len);
 					memcpy(mod_buf, buf, h->len);
-					memcpy(mod_buf, clientMAC, 6);
+					memcpy(mod_buf, lastSuccessClientMAC, 6); // clientMAC已经在成功时被清除了，所以使用lastSuccessClientMAC
 					pcap_sendpacket(hPcapLan, mod_buf, h->len);
 					free(mod_buf);
 				}

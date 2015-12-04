@@ -72,6 +72,7 @@ u_int32_t dns = 0;	/* DNS */
 u_int32_t pingHost = 0;	/* ping */
 u_char localMAC[6];	/* 本机MAC（WAN） */
 u_char clientMAC[6];	/* 当前正在认证的客户端MAC，仅在代理模式下使用 */
+u_char lastSuccessClientMAC[6];	/* 上次认证成功的客户端MAC，仅在代理模式下使用，用于掉线通知 */
 u_char destMAC[6];	/* 服务器MAC */
 unsigned timeout = D_TIMEOUT;	/* 超时间隔 */
 unsigned echoInterval = D_ECHOINTERVAL;	/* 心跳间隔 */
