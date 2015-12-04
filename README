@@ -58,6 +58,27 @@ sudo mentohust -uUsername -pPassword
 sudo ln -s libpcap.so.0.x.y /usr/lib/libpcap.so.0.x
 否则请安装libpcap。
 
+####代理认证
+在代理认证模式下，MentoHUST不会自行完成整个认证流程，而是充当802.1x路由器，由局域网内其他设备协助完成认证。
+
+在命令行中指定-z为连接局域网的网卡，代理模式即会开启，无需为MentoHUST指定用户名和密码。
+
+代理模式下，MentoHUST将会按照以下流程工作：
+
+1. 从命令行读取局域网网卡名（-z）、上游接口名（-n）、需求成功次数（-j）等。
+2. 将局域网和连接上游的网卡设置为混杂模式。开始在局域网内监听一切802.1x认证数据包（protocol字段为0x888E）。
+3. 当收到客户端发来的EAPOL-Start包时，保存客户端MAC地址，并用自己的算法构造出一个新的EAPOL-Start包，向上游发送。
+4. 当上游服务器发来EAP-Request-Identity时，保存服务器的MAC地址，将此包的目标MAC地址由连接上游网卡的MAC地址改为客户端MAC地址，向局域网发送。
+5. 当客户端发来EAP-Response-Identity时，将此包的源MAC地址由客户端MAC地址改为上游服务器的MAC地址，向上游发送。
+6. 对于接下来的MD5 Challenge重复4和5.
+7. 对于最后的EAP-Success或Failure重复4. 若为Success，且已收到的Success包个数大于等于-j指定的值，则停止对局域网的监听。否则继续监听。
+
+当认证成功后，上游服务器发来EAP-Request-Identity、MD5 Challenge或Failure时，MentoHUST将重新开始监听局域网，并把这些包修改目标MAC地址后转发到局域网，客户端可自行处理。
+
+**注意**：由于需要由MentoHUST来构造EAPOL-Start包，因此DHCP类型、组播地址需要正确设定。
+
+代理认证相关设置暂不支持写入配置文件，仅可通过命令行使用。
+
 其他事项
 ========
 ####开发者资源
