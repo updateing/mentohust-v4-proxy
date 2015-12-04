@@ -73,8 +73,8 @@ int main(int argc, char **argv)
 	if (proxyMode == 0) {
 		wan_thread(); // 非代理模式，直接执行，不使用多线程
 	} else { // 代理模式，为LAN多开一个线程
-		wan_thread();
 		pthread_create(&thread_lan, NULL, lan_thread, 0);
+		wan_thread();
 		pthread_join(thread_lan, &retval);
 	}
 	exit(EXIT_FAILURE);
