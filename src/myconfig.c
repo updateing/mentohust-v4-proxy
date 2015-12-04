@@ -93,6 +93,9 @@ static void printConfig();	/* 显示初始化后的认证参数 */
 static int openPcap();	/* 初始化pcap、设置过滤器 */
 static void saveConfig(int daemonMode);	/* 保存参数 */
 static void checkRunning(int exitFlag, int daemonMode);	/* 检测是否已运行 */
+#ifdef __UCLIBC__
+static int uclibc_daemon(int nochdir, int noclose); /* uClibc中daemon后pthread_create阻塞的解决办法 */
+#endif
 
 #ifndef NO_ENCODE_PASS
 static const unsigned char base64Tab[] = {"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"};
@@ -675,7 +678,11 @@ static void checkRunning(int exitFlag, int daemonMode)
 	}
 	if (daemonMode) {	/* 貌似我过早进入后台模式了，就给个选项保留输出或者输出到文件吧 */
 		printf(_(">> 进入后台运行模式，使用参数-k可退出认证。\n"));
+#ifndef __UCLIBC__
 		if (daemon(0, (daemonMode+1)%2))
+#else
+		if (uclibc_daemon(0, (daemonMode+1)%2))
+#endif
 			perror(_("!! 后台运行失败"));
 		else if (daemonMode == 3) {
 			freopen(LOG_FILE, "w", stdout);
@@ -699,3 +706,38 @@ error_exit:
 #endif
 	exit(EXIT_FAILURE);
 }
+
+#ifdef __UCLIBC__
+/*
+	uClibc中daemon的实现存在问题，会导致daemon后pthread_create阻塞父线程。
+	手动实现daemon即可解决此问题。
+*/
+static int uclibc_daemon(int nochdir,  int noclose)
+{
+	pid_t pid;
+	if (!nochdir && chdir("/") != 0)
+		return -1;
+
+	if (!noclose)
+	{
+		int fd = open("/dev/null", O_RDWR);
+		if (fd  <  0)
+			return -1;
+
+		dup2(fd, 0);
+		dup2(fd, 1);
+		dup2(fd, 2);
+		close(fd);
+	}
+
+	pid = fork();
+	if (pid < 0)
+		return -1;
+	if (pid > 0)
+		_exit(0);
+
+   if (setsid() < 0)
+      return -1;
+   return 0;
+}
+#endif
