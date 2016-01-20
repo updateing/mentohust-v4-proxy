@@ -157,64 +157,73 @@ static void sig_handle(int sig)
 static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_char *buf)
 {
 	PACKET_HEADER* hdr = (PACKET_HEADER*)buf;
-	u_char* mod_buf; // 修改MAC后的包
-	int char_to_int;
+	int eap_type_int; // EAP中的type
+	int eapol_type_int = hdr->eapol_hdr.type;
+	MAC_CHECK_STATUS mac_status = proxy_check_mac_integrity(packet);
 
-	if (memcmp(clientMAC, "\0\0\0\0\0\0", 6) == 0) { // 没有存下客户端MAC地址，表明尚未有客户端开始认证
-		if (hdr->eapol_hdr.type == EAPOL_START) { // 接收到客户端的Start包，本次认证中锁定此MAC地址
-			memcpy(clientMAC, buf + 6, 6);
+	switch (eapol_type_int) {
+	case EAPOL_START:
+		switch (mac_status) {
+		case MAC_NOT_DEFINED:
 			printf(_(">> 客户端%s正在发起认证\n"), formatHex(clientMAC, 6));
-			proxyClientRequested = 1; // 在switchState后将由MentoHUST发出Start包
+			proxy_store_client_mac(packet); // 锁定客户端的MAC地址，以防不同设备的认证流程干扰
+			proxyClientRequested = 1;
 			switchState(ID_START);
-		} else {
-			if (state != ID_START) { // MentoHUST尚未开始认证时收到了其他类型的数据包，表明认证流程错误
-				printf(_("!! 客户端的Start包丢失，将重启认证！\n"));
-				proxyClientRequested = 0;
+			break;
+		case MAC_CHECK_PASSED:
+			if (state == ID_ECHO || state == ID_WAITECHO) {
+				printf(_("!! 客户端在认证完成后发送Start包，忽略\n"));
+				goto DONE;
+			} else {
+				/* 这里一般是多次认证（-j参数大于1时） */
+				printf(_(">> 客户端%s再次发起认证\n"), formatHex(clientMAC, 6));
 				switchState(ID_START);
 			}
+			break;
+		case MAC_CHECK_FAILED:
+			goto PROXY_INTERRUPTED;
 		}
-	} else { // 已存储过MAC地址，表示已有认证在进行中
-		if (memcmp(clientMAC, hdr->eth_hdr.src_mac, 6) == 0) {
-			switch (char_to_int = hdr->eapol_hdr.type) { // 以下switch是为了分类型处理各个包
-			case EAPOL_START:
-				if (proxySuccessCount >= proxyRequireSuccessCount) {
-					printf(_("!! 客户端在认证完成后发送Start包，忽略\n"));
-					return;
-				} else {
-					printf(_(">> 客户端%s正在发起认证\n"), formatHex(clientMAC, 6));
-					switchState(ID_START);
-				}
+		break;
+	case EAPOL_LOGOFF:
+		switch (mac_status) {
+		case MAC_CHECK_FAILED:
+			goto PROXY_INTERRUPTED;
+		case MAC_NOT_DEFINED:
+			goto DONE;
+		case MAC_CHECK_PASSED:
+			printf(_("!! 客户端要求断开认证，将忽略此请求\n"));
+			goto DONE;
+		}
+	case EAP_PACKET:
+		switch (mac_status) {
+		case MAC_CHECK_FAILED:
+			goto PROXY_INTERRUPTED;
+		case MAC_NOT_DEFINED:
+			goto DONE;
+		case MAC_CHECK_PASSED:
+			eap_type_int = hdr->eap_hdr.type;
+			switch (eap_type_int) {
+			case IDENTITY:
+				printf(_(">> 客户端已发送用户名\n"));
 				break;
-			case EAPOL_LOGOFF:
-				printf(_("!! 客户端要求断开认证，将忽略此请求\n"));
-				return;
-			case EAP_PACKET:
-				switch (char_to_int = hdr->eap_hdr.code) {
-				case EAP_REQUEST:
-				case EAP_SUCCESS:
-				case EAP_FAILURE:
-					return;
-				case EAP_RESPONSE:
-					switch (char_to_int = hdr->eap_hdr.type) {
-					case IDENTITY:
-						printf(_(">> 客户端已发送用户名\n"));
-						break;
-					case MD5_CHALLENGE:
-						printf(_(">> 客户端已发送密码\n"));
-						break;
-					}
-				}
+			case MD5_CHALLENGE:
+				printf(_(">> 客户端已发送密码\n"));
+				break;
 			}
-			mod_buf = malloc(h->len);
-			memcpy(mod_buf, buf, h->len);
-			memcpy(mod_buf + 6, localMAC, 6); // 将客户端发来的数据包中源MAC改为本设备的
-			pcap_sendpacket(hPcap, mod_buf, h->len);
-			free(mod_buf);
-		} else {
-			printf(_("!! 认证流程受到来自%s的干扰！\n"), formatHex(hdr->eth_hdr.src_mac, 6));
+			break;
 		}
 	}
 
+	/*
+	所有不需代理的情况均已处理完毕，
+	现在将客户端发来的数据包中源MAC改为本设备的并发送出去
+	*/
+	proxy_send_to_wan(packet, h->len);
+	goto DONE;
+
+PROXY_INTERRUPTED:
+	printf(_("!! 认证流程受到来自%s的干扰！\n"), formatHex(hdr->eth_hdr.src_mac, 6));
+DONE:
 	return;
 }
 
@@ -223,7 +232,6 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 	static unsigned failCount = 0;
 	u_char* mod_buf;
     pthread_t thread_lan;
-    //void *retval; // pthread线程的返回值，本程序中没有实际用处
 
 #ifndef NO_ARP
 	if (buf[0x0c]==0x88 && buf[0x0d]==0x8e) {
@@ -235,7 +243,7 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 			if (startMode < 3) {
 				memcpy(destMAC, buf+6, 6);
 				printf(_("** 认证MAC:\t%s\n"), formatHex(destMAC, 6));
-				startMode += 3;	/* 标记为已获取 */
+				startMode += 3;	/* 标记认证服务器MAC为已获取，可以锁定 */
 			}
 			if (proxyMode == 0) {
 				if (startMode==3 && memcmp(buf+0x17, "User name", 9)==0)	/* 塞尔 */
@@ -256,7 +264,7 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 			}
 		}
 		else if (buf[0x0F]==0x00 && buf[0x12]==0x01 && buf[0x16]==0x04)	{ /* 验证密码 */
-			if (proxyMode ==0) {
+			if (proxyMode == 0) {
 				switchState(ID_CHALLENGE);
 			} else {
 				if (proxyClientRequested == 1) {

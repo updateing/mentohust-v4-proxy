@@ -24,4 +24,6 @@ typedef enum _MAC_CHECK_STATUS
 void proxy_store_client_mac(u_char* packet); // 存储当前数据包中的源MAC地址（用于在一次认证流程中锁定客户端）
 void proxy_clear_client_mac(); // 清除已储存的MAC地址，为下次认证做准备
 MAC_CHECK_STATUS proxy_check_mac_intergrity(u_char* packet); // 检查当前数据包中的源MAC地址是否与已储存的地址相同
+void proxy_send_to_lan(u_char* packet); // 改变目的地址并发送到LAN
+void proxy_send_to_wan(u_char* packet); // 改变源地址并发送到WAN
 #endif

@@ -34,3 +34,12 @@ void proxy_clear_client_mac()
 {
 	memset(clientMAC, 0, 6);
 }
+
+void proxy_send_to_wan(u_char* packet, int len)
+{
+	u_char* mod_buf = malloc(len);
+	memmove(mod_buf, buf, len);
+	memmove(mod_buf + 6, localMAC, 6);
+	pcap_sendpacket(hPcap, mod_buf, len);
+	free(mod_buf);
+}
