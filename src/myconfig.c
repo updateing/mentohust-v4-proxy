@@ -528,7 +528,7 @@ static void printConfig()
 		printf(_("** 已启用代理模式\n"));
 		printf(_("** WAN网卡: \t%s\n"), nic);
 		printf(_("** LAN网卡: \t%s\n"), nicLan);
-		printf(_("** 成功次数要求: \t%d\n"), proxyRequireSuccessCount);
+		printf(_("** 要求成功: \t%d次\n"), proxyRequireSuccessCount);
 	}
 	if (gateway)
 		printf(_("** 网关地址:\t%s\n"), formatIP(gateway));

@@ -17,6 +17,7 @@
 #include "myfunc.h"
 #include "dlfunc.h"
 #include "packet_header.h"
+#include "proxy_util.h"
 #include <pthread.h>
 #include <signal.h>
 #include <string.h>
@@ -162,14 +163,14 @@ static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_c
 	PACKET_HEADER* hdr = (PACKET_HEADER*)buf;
 	int eap_type_int; // EAP中的type
 	int eapol_type_int = hdr->eapol_hdr.type;
-	MAC_CHECK_STATUS mac_status = proxy_check_mac_integrity(packet);
+	MAC_CHECK_STATUS mac_status = proxy_check_mac_integrity(buf);
 
 	switch (eapol_type_int) {
 	case EAPOL_START:
 		switch (mac_status) {
 		case MAC_NOT_DEFINED:
 			printf(_(">> 客户端%s正在发起认证\n"), formatHex(clientMAC, 6));
-			proxy_store_client_mac(packet); // 锁定客户端的MAC地址，以防不同设备的认证流程干扰
+			proxy_store_client_mac(buf); // 锁定客户端的MAC地址，以防不同设备的认证流程干扰
 			proxyClientRequested = 1;
 			switchState(ID_START);
 			break;
@@ -221,7 +222,7 @@ static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_c
 	所有不需代理的情况均已处理完毕，
 	现在将客户端发来的数据包中源MAC改为本设备的并发送出去
 	*/
-	proxy_send_to_wan(packet, h->len);
+	proxy_send_to_wan(buf, h->len);
 	goto DONE;
 
 PROXY_INTERRUPTED:
@@ -255,11 +256,7 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 			} else {
 				if (proxyClientRequested == 1) {
 					printf(_(">> 服务器已请求用户名\n"));
-					mod_buf = malloc(h->len);
-					memcpy(mod_buf, buf, h->len);
-					memcpy(mod_buf, clientMAC, 6); // 把目标MAC改为客户端
-					pcap_sendpacket(hPcapLan, mod_buf, h->len);
-					free(mod_buf);
+					proxy_send_to_lan(buf, h->len);
 				} else {
 					printf(_("!! 在代理认证完成后收到用户名请求，将重启认证！\n"));
 					switchState(ID_WAITCLIENT);
@@ -272,11 +269,7 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 			} else {
 				if (proxyClientRequested == 1) {
 					printf(_(">> 服务器已请求密码\n"));
-					mod_buf = malloc(h->len);
-					memcpy(mod_buf, buf, h->len);
-					memcpy(mod_buf, clientMAC, 6); // 把目标MAC改为客户端
-					pcap_sendpacket(hPcapLan, mod_buf, h->len);
-					free(mod_buf);
+					proxy_send_to_lan(buf, h->len);
 				} else {
 					printf(_("!! 在代理认证完成后收到密码请求，将重启认证！\n"));
 					switchState(ID_WAITCLIENT);
@@ -288,11 +281,7 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 			failCount = 0;
 			proxySuccessCount++;
 			if (proxyMode != 0) {
-				mod_buf = malloc(h->len);
-				memcpy(mod_buf, buf, h->len);
-				memcpy(mod_buf, clientMAC, 6); // 把目标MAC改为客户端
-				pcap_sendpacket(hPcapLan, mod_buf, h->len); // 让目标知道认证已成功
-				free(mod_buf);
+				proxy_send_to_lan(buf, h->len);
 				if (proxySuccessCount >= proxyRequireSuccessCount) {
 					pcap_breakloop(hPcapLan);
 					proxyClientRequested = 0;
@@ -321,16 +310,16 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 			if (state==ID_WAITECHO || state==ID_ECHO) {
 				if (proxyMode == 0) {
 					printf(_(">> 认证掉线，开始重连!\n"));
+					switchState(ID_START);
 				} else {
 					pthread_create(&thread_lan, NULL, lan_thread, 0);
 					printf(_(">> 认证掉线，已发回客户端并重新启用对LAN的监听\n"));
-					mod_buf = malloc(h->len);
-					memcpy(mod_buf, buf, h->len);
-					memcpy(mod_buf, lastSuccessClientMAC, 6); // clientMAC已经在成功时被清除了，所以使用lastSuccessClientMAC
-					pcap_sendpacket(hPcapLan, mod_buf, h->len);
-					free(mod_buf);
+					// clientMAC已经在成功时被清除了，所以使用lastSuccessClientMAC发送，发完清除
+					memmove(clientMAC, lastSuccessClientMAC, 6);
+					proxy_send_to_lan(buf, h->len);
+					proxy_clear_client_mac();
+					switchState(ID_WAITCLIENT);
 				}
-				switchState(ID_START);
 			}
 			else if (buf[0x1b]!=0 || startMode%3==2) {
 				printf(_(">> 认证失败!\n"));
