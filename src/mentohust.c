@@ -16,7 +16,7 @@
 #include "mystate.h"
 #include "myfunc.h"
 #include "dlfunc.h"
-#include "packet_const.h"
+#include "packet_header.h"
 #include <pthread.h>
 #include <signal.h>
 #include <string.h>
@@ -166,12 +166,14 @@ static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_c
 			printf(_(">> 客户端%s正在发起认证\n"), formatHex(clientMAC, 6));
 			proxyClientRequested = 1; // 在switchState后将由MentoHUST发出Start包
 			switchState(ID_START);
-		} else { // 尚未开始认证时收到了其他类型的数据包，表明认证流程错误
-			printf(_("!! 客户端的Start包丢失，将重启认证！\n"));
-			proxyClientRequested = 0;
-			switchState(ID_START);
+		} else {
+			if (state != ID_START) { // MentoHUST尚未开始认证时收到了其他类型的数据包，表明认证流程错误
+				printf(_("!! 客户端的Start包丢失，将重启认证！\n"));
+				proxyClientRequested = 0;
+				switchState(ID_START);
+			}
 		}
-	} else { // 已有认证在进行中
+	} else { // 已存储过MAC地址，表示已有认证在进行中
 		if (memcmp(clientMAC, hdr->eth_hdr.src_mac, 6) == 0) {
 			switch (char_to_int = hdr->eapol_hdr.type) { // 以下switch是为了分类型处理各个包
 			case EAPOL_START:
