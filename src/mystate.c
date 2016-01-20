@@ -109,7 +109,10 @@ int switchState(int type)
 		if (pingHost && sendCount*echoInterval > 60) {	/* 1分钟左右 */
 			if (isOnline() == -1) {
 				printf(_(">> 认证掉线，开始重连!\n"));
-				return switchState(ID_START);
+				if (proxyMode == 0)
+					return switchState(ID_START);
+				else
+					return switchState(ID_WAITCLIENT);
 			}
 			sendCount = 1;
 		}
@@ -151,8 +154,12 @@ static int renewIP()
 	if (fillHeader() == -1)
 		exit(EXIT_FAILURE);
 	if (dhcpMode == 5)
-		return switchState(ID_ECHO);
-	return switchState(ID_START);
+		return switchState(ID_ECHO); /* 认证后DHCP，DHCP完毕即可开始响应 */
+	else
+		if (proxyMode == 0)
+			return switchState(ID_START); /* 认证前或二次认证，DHCP完毕开始认证 */
+		else
+			return switchState(ID_WAITCLIENT);
 }
 
 static void fillEtherAddr(u_int32_t protocol)
