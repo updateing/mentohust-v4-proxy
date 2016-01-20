@@ -287,7 +287,7 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 					proxyClientRequested = 0;
 					proxySuccessCount = 0;
 					memcpy(lastSuccessClientMAC, clientMAC, 6); // 备份本次认证成功的客户端MAC，用于通知掉线
-					memset(clientMAC, 0, 6); // 重设MAC地址，以备下次使用不同客户端认证用
+					proxy_clear_client_mac(); // 重设MAC地址，以备下次使用不同客户端认证用
 					printf(_(">> 已关闭LAN监听线程\n"));
 				}
 			}
