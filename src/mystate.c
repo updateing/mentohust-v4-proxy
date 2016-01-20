@@ -49,10 +49,11 @@ static int renewIP();	/* 更新IP */
 static void fillEtherAddr(u_int32_t protocol);  /* 填充MAC地址和协议 */
 static int sendStartPacket();	 /* 发送Start包 */
 static int sendIdentityPacket();	/* 发送Identity包 */
-static int sendChallengePacket();   /* 发送Md5 Challenge包 */
+static int sendChallengePacket();   /* 发送MD5 Challenge包 */
 static int sendEchoPacket();	/* 发送心跳包 */
 static int sendLogoffPacket();  /* 发送退出包 */
 static int waitEchoPacket();	/* 等候响应包 */
+static int waitClientStart();	/* 等候客户端发起认证 */
 
 static void setTimer(unsigned interval) /* 设置定时器 */
 {
@@ -119,6 +120,8 @@ int switchState(int type)
 		return sendEchoPacket();
 	case ID_DISCONNECT:
 		return sendLogoffPacket();
+	case ID_WAITCLIENT:
+		return waitClientStart();
 	}
 	return 0;
 }
@@ -127,9 +130,14 @@ int restart()
 {
 	if (startMode >= 3)	/* 标记服务器地址为未获取 */
 		startMode -= 3;
-	state = ID_START;
 	sendCount = -1;
-	setTimer(restartWait);	/* restartWait秒后或者服务器请求后重启认证 */
+	if (proxyMode == 0) {
+		state = ID_START;
+		setTimer(restartWait);	/* restartWait秒或服务器请求后由(pcap|sig)_handle被动重启认证 */
+	} else {
+		state = ID_WAITCLIENT;
+		waitClientStart(); /* 代理认证不需要等待，直接主动重启认证 */
+	}
 	return 0;
 }
 
@@ -157,35 +165,29 @@ static void fillEtherAddr(u_int32_t protocol)
 
 static int sendStartPacket()
 {
-	if (proxyMode == 0 || proxyClientRequested != 0) { // 在禁用代理或（启用代理且有客户端提出请求）时才发送Start包
-		if (startMode%3 == 2)	/* 赛尔 */
-		{
-			if (sendCount == 0)
-			{
-				printf(_(">> 寻找服务器...\n"));
-				memcpy(sendPacket, STANDARD_ADDR, 6);
-				memcpy(sendPacket+0x06, localMAC, 6);
-				*(u_int32_t *)(sendPacket+0x0C) = htonl(0x888E0101);
-				*(u_int16_t *)(sendPacket+0x10) = 0;
-				memset(sendPacket+0x12, 0xa5, 42);
-				setTimer(timeout);
-			}
-			return pcap_sendpacket(hPcap, sendPacket, 60);
-		}
+	if (startMode%3 == 2)	/* 赛尔 */
+	{
 		if (sendCount == 0)
 		{
 			printf(_(">> 寻找服务器...\n"));
-			fillStartPacket();
-			fillEtherAddr(0x888E0101);
-			memcpy(sendPacket+0x12, fillBuf, fillSize);
+			memcpy(sendPacket, STANDARD_ADDR, 6);
+			memcpy(sendPacket+0x06, localMAC, 6);
+			*(u_int32_t *)(sendPacket+0x0C) = htonl(0x888E0101);
+			*(u_int16_t *)(sendPacket+0x10) = 0;
+			memset(sendPacket+0x12, 0xa5, 42);
 			setTimer(timeout);
 		}
-		return pcap_sendpacket(hPcap, sendPacket, 0x3E8);
-	} else {
-		printf(_(">> 正在等待客户端发起认证...\n"));
-		sendCount = -1; // 假装没有发送过start，以免持续等待
-		return 0;
+		return pcap_sendpacket(hPcap, sendPacket, 60);
 	}
+	if (sendCount == 0)
+	{
+		printf(_(">> 寻找服务器...\n"));
+		fillStartPacket();
+		fillEtherAddr(0x888E0101);
+		memcpy(sendPacket+0x12, fillBuf, fillSize);
+		setTimer(timeout);
+	}
+	return pcap_sendpacket(hPcap, sendPacket, 0x3E8);
 }
 
 static int sendIdentityPacket()
@@ -309,6 +311,12 @@ static int waitEchoPacket()
 {
 	if (sendCount == 0)
 		setTimer(echoInterval);
+	return 0;
+}
+
+static int waitClientStart()
+{
+	printf(_(">> 正在等待客户端发起认证...\n"));
 	return 0;
 }
 

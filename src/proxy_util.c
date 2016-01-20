@@ -12,7 +12,8 @@
 
 #define SOURCE_MAC_OFFSET 6
 
-u_char clientMAC[6];	/* 当前正在认证的客户端MAC，仅在代理模式下使用 */
+u_char clientMAC[6];	/* 当前正在认证的客户端MAC */
+u_char lastSuccessClientMAC[6];	/* 上次认证成功的客户端MAC */
 
 MAC_CHECK_STATUS proxy_check_mac_intergrity(u_char* packet)
 {

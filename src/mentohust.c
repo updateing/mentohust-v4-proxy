@@ -69,7 +69,10 @@ int main(int argc, char **argv)
 	if (dhcpMode == 3)	  /* 认证前DHCP */
 		switchState(ID_DHCP);
 	else
-		switchState(ID_START);	/* 开始认证 */
+		if (proxyMode == 0)
+			switchState(ID_START);	/* 不使用代理时直接开始认证 */
+		else
+			switchState(ID_WAITCLIENT); /* 开启代理时等待客户端认证 */
 	if (proxyMode == 0) {
 		wan_thread(); // 非代理模式，直接执行，不使用多线程
 	} else { // 代理模式，为LAN多开一个线程
@@ -259,7 +262,7 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 					free(mod_buf);
 				} else {
 					printf(_("!! 在代理认证完成后收到用户名请求，将重启认证！\n"));
-					switchState(ID_START);
+					switchState(ID_WAITCLIENT);
 				}
 			}
 		}
@@ -276,7 +279,7 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 					free(mod_buf);
 				} else {
 					printf(_("!! 在代理认证完成后收到密码请求，将重启认证！\n"));
-					switchState(ID_START);
+					switchState(ID_WAITCLIENT);
 				}
 			}
 		}
@@ -338,9 +341,12 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 					exit(EXIT_SUCCESS);
 				}
 				restart();
+			} else {
+				if (proxyMode == 0)
+					switchState(ID_START);
+				else
+					switchState(ID_WAITCLIENT);
 			}
-			else
-				switchState(ID_START);
 		}
 #ifndef NO_ARP
 	} else if (gateMAC[0]!=0xFE && buf[0x0c]==0x08 && buf[0x0d]==0x06) {
