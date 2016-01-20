@@ -160,64 +160,59 @@ static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_c
 	u_char* mod_buf; // 修改MAC后的包
 	int char_to_int;
 
-#ifndef NO_ARP
-	if (ntohs(*(unsigned short*)(hdr->eth_hdr.protocol)) == 0x888e) {
-#endif
-		if (memcmp(clientMAC, "\0\0\0\0\0\0", 6) == 0) { // 没有存下客户端MAC地址，表明尚未有客户端开始认证
-			if (hdr->eapol_hdr.type == EAPOL_START) { // 接收到客户端的Start包，本次认证中锁定此MAC地址
-				memcpy(clientMAC, buf + 6, 6);
-				printf(_(">> 客户端%s正在发起认证\n"), formatHex(clientMAC, 6));
-				proxyClientRequested = 1; // 在switchState后将由MentoHUST发出Start包
-				switchState(ID_START);
-			} else { // 尚未开始认证时收到了其他类型的数据包，表明认证流程错误
-				printf(_("!! 客户端的Start包丢失，将重启认证！\n"));
-				proxyClientRequested = 0;
-				switchState(ID_START);
-			}
-		} else { // 已有认证在进行中
-			if (memcmp(clientMAC, hdr->eth_hdr.src_mac, 6) == 0) {
-				switch (char_to_int = hdr->eapol_hdr.type) { // 以下switch是为了分类型处理各个包
-				case EAPOL_START:
-					if (proxySuccessCount >= proxyRequireSuccessCount) {
-						printf(_("!! 客户端在认证完成后发送Start包，忽略\n"));
-						return;
-					} else {
-						printf(_(">> 客户端%s正在发起认证\n"), formatHex(clientMAC, 6));
-						switchState(ID_START);
-					}
-					break;
-				case EAPOL_LOGOFF:
-					printf(_("!! 客户端要求断开认证，将忽略此请求\n"));
+	if (memcmp(clientMAC, "\0\0\0\0\0\0", 6) == 0) { // 没有存下客户端MAC地址，表明尚未有客户端开始认证
+		if (hdr->eapol_hdr.type == EAPOL_START) { // 接收到客户端的Start包，本次认证中锁定此MAC地址
+			memcpy(clientMAC, buf + 6, 6);
+			printf(_(">> 客户端%s正在发起认证\n"), formatHex(clientMAC, 6));
+			proxyClientRequested = 1; // 在switchState后将由MentoHUST发出Start包
+			switchState(ID_START);
+		} else { // 尚未开始认证时收到了其他类型的数据包，表明认证流程错误
+			printf(_("!! 客户端的Start包丢失，将重启认证！\n"));
+			proxyClientRequested = 0;
+			switchState(ID_START);
+		}
+	} else { // 已有认证在进行中
+		if (memcmp(clientMAC, hdr->eth_hdr.src_mac, 6) == 0) {
+			switch (char_to_int = hdr->eapol_hdr.type) { // 以下switch是为了分类型处理各个包
+			case EAPOL_START:
+				if (proxySuccessCount >= proxyRequireSuccessCount) {
+					printf(_("!! 客户端在认证完成后发送Start包，忽略\n"));
 					return;
-				case EAP_PACKET:
-					switch (char_to_int = hdr->eap_hdr.code) {
-					case EAP_REQUEST:
-					case EAP_SUCCESS:
-					case EAP_FAILURE:
-						return;
-					case EAP_RESPONSE:
-						switch (char_to_int = hdr->eap_hdr.type) {
-						case IDENTITY:
-							printf(_(">> 客户端已发送用户名\n"));
-							break;
-						case MD5_CHALLENGE:
-							printf(_(">> 客户端已发送密码\n"));
-							break;
-						}
+				} else {
+					printf(_(">> 客户端%s正在发起认证\n"), formatHex(clientMAC, 6));
+					switchState(ID_START);
+				}
+				break;
+			case EAPOL_LOGOFF:
+				printf(_("!! 客户端要求断开认证，将忽略此请求\n"));
+				return;
+			case EAP_PACKET:
+				switch (char_to_int = hdr->eap_hdr.code) {
+				case EAP_REQUEST:
+				case EAP_SUCCESS:
+				case EAP_FAILURE:
+					return;
+				case EAP_RESPONSE:
+					switch (char_to_int = hdr->eap_hdr.type) {
+					case IDENTITY:
+						printf(_(">> 客户端已发送用户名\n"));
+						break;
+					case MD5_CHALLENGE:
+						printf(_(">> 客户端已发送密码\n"));
+						break;
 					}
 				}
-				mod_buf = malloc(h->len);
-				memcpy(mod_buf, buf, h->len);
-				memcpy(mod_buf + 6, localMAC, 6); // 将客户端发来的数据包中源MAC改为本设备的
-				pcap_sendpacket(hPcap, mod_buf, h->len);
-				free(mod_buf);
-			} else {
-				printf(_("!! 认证流程受到来自%s的干扰！\n"), formatHex(hdr->eth_hdr.src_mac, 6));
 			}
+			mod_buf = malloc(h->len);
+			memcpy(mod_buf, buf, h->len);
+			memcpy(mod_buf + 6, localMAC, 6); // 将客户端发来的数据包中源MAC改为本设备的
+			pcap_sendpacket(hPcap, mod_buf, h->len);
+			free(mod_buf);
+		} else {
+			printf(_("!! 认证流程受到来自%s的干扰！\n"), formatHex(hdr->eth_hdr.src_mac, 6));
 		}
-#ifndef NO_ARP
 	}
-#endif
+
 	return;
 }
 
