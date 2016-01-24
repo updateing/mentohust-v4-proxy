@@ -19,6 +19,7 @@ static const char *PACKAGE_BUGREPORT = "http://code.google.com/p/mentohust/issue
 #include "myini.h"
 #include "myfunc.h"
 #include "dlfunc.h"
+#include "yashargs.h"
 #include <string.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -66,6 +67,7 @@ char nic[NIC_SIZE] = "";	/* 发出认证数据包的网卡名（WAN） */
 char nicLan[NIC_SIZE] = "";	/* 监听认证数据包的网卡名（LAN，仅在代理模式下使用） */
 char dataFile[MAX_PATH] = "";	/* 数据文件 */
 char dhcpScript[MAX_PATH] = "";	/* DHCP脚本 */
+char **dhcpArguements;
 u_int32_t ip = 0;	/* 本机IP */
 u_int32_t mask = 0;	/* 子网掩码 */
 u_int32_t gateway = 0;	/* 网关 */
@@ -557,7 +559,15 @@ static void printConfig()
 	if (bufType >= 2)
 		printf(_("** 数据文件:\t%s\n"), dataFile);
 	if (dhcpMode != 0)
-		printf(_("** DHCP脚本:\t%s\n"), dhcpScript);
+    {
+		printf(_("** DHCP脚本:\t"));
+        dhcpArguements = yash_args(dhcpScript);
+        for(char **tmp = dhcpArguements; tmp != 0 && *tmp != 0; tmp++)
+        {
+            puts(*tmp);
+        }
+        putchar('\n');
+    }
 }
 
 static int openPcap()
