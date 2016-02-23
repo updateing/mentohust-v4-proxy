@@ -293,8 +293,8 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 			}
 			if (!(startMode%3 == 2)) {
 				getEchoKey(buf);
-				showRuijieMsg(buf, h->caplen);
 			}
+			showRuijieMsg(buf, h->caplen);
 			if (dhcpMode==1 || dhcpMode==2)	/* 二次认证第一次或者认证后 */
 				switchState(ID_DHCP);
 			else if (startMode%3 == 2)
@@ -310,10 +310,12 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 			if (state==ID_WAITECHO || state==ID_ECHO) {
 				if (proxyMode == 0) {
 					printf(_(">> 认证掉线，开始重连!\n"));
+					showRuijieMsg(buf, h->caplen);
 					switchState(ID_START);
 				} else {
 					pthread_create(&thread_lan, NULL, lan_thread, 0);
 					printf(_(">> 认证掉线，已发回客户端并重新启用对LAN的监听\n"));
+					showRuijieMsg(buf, h->caplen);
 					// clientMAC已经在成功时被清除了，所以使用lastSuccessClientMAC发送，发完清除
 					memmove(clientMAC, lastSuccessClientMAC, 6);
 					proxy_send_to_lan(buf, h->len);
@@ -323,8 +325,7 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 			}
 			else if (buf[0x1b]!=0 || startMode%3==2) {
 				printf(_(">> 认证失败!\n"));
-				if (startMode%3 != 2)
-					showRuijieMsg(buf, h->caplen);
+				showRuijieMsg(buf, h->caplen);
 				if (maxFail && ++failCount>=maxFail) {
 					printf(_(">> 连续认证失败%u次，退出认证。\n"), maxFail);
 					exit(EXIT_SUCCESS);
