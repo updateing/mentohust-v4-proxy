@@ -20,6 +20,7 @@ static const char *PACKAGE_BUGREPORT = "http://code.google.com/p/mentohust/issue
 #include "myfunc.h"
 #include "dlfunc.h"
 #include "yashargs.h"
+#include "util.h"
 #include <string.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -681,21 +682,21 @@ static void checkRunning(int exitFlag, int daemonMode)
 	}
 	if (exitFlag) {
 		if (fl.l_type != F_UNLCK) {
-			printf(_(">> 已发送退出信号给MentoHUST进程(PID=%d).\n"), fl.l_pid);
+			printf(_("[%s] >> 已发送退出信号给MentoHUST进程(PID=%d).\n"), get_formatted_date(), fl.l_pid);
 			if (kill(fl.l_pid, SIGINT) == -1)
 				perror(_("!! 结束进程失败"));
 		}
 		else
-			printf(_("!! 没有MentoHUST正在运行！\n"));
+			printf(_("[%s] !! 没有MentoHUST正在运行！\n"), get_formatted_date());
 		if (exitFlag == 1)
 			exit(EXIT_SUCCESS);
 	}
 	else if (fl.l_type != F_UNLCK) {
-		printf(_("!! MentoHUST已经运行(PID=%d)!\n"), fl.l_pid);
+		printf(_("[%s] !! MentoHUST已经运行(PID=%d)!\n"), get_formatted_date(), fl.l_pid);
 		exit(EXIT_FAILURE);
 	}
 	if (daemonMode) {	/* 貌似我过早进入后台模式了，就给个选项保留输出或者输出到文件吧 */
-		printf(_(">> 进入后台运行模式，使用参数-k可退出认证。\n"));
+		printf(_("[%s] >> 进入后台运行模式，使用参数-k可退出认证。\n"), get_formatted_date());
 #ifndef __UCLIBC__
 		if (daemon(0, (daemonMode+1)%2))
 #else
