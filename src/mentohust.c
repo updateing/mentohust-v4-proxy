@@ -29,7 +29,7 @@ extern pcap_t *hPcap, *hPcapLan;
 extern volatile int state;
 extern u_char *fillBuf;
 extern const u_char *capBuf;
-extern unsigned startMode, dhcpMode, maxFail;
+extern unsigned startMode, dhcpMode, maxFail, restartOnLogOff;
 extern unsigned proxyMode, proxyClientRequested, proxySuccessCount, proxyRequireSuccessCount;
 extern u_char destMAC[], localMAC[], clientMAC[], lastSuccessClientMAC[];
 extern int lockfd;
@@ -309,9 +309,14 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 		else if (buf[0x0F]==0x00 && buf[0x12]==0x04) {  /* 认证失败或被踢下线 */
 			if (state==ID_WAITECHO || state==ID_ECHO) {
 				if (proxyMode == 0) {
-					printf(_(">> 认证掉线，开始重连!\n"));
+					printf(_(">> 认证掉线！\n"));
 					showRuijieMsg(buf, h->caplen);
-					switchState(ID_START);
+					if (restartOnLogOff) {
+						printf(_(">> 正在重新认证...\n"));
+						switchState(ID_START);					
+					} else {
+						exit(1);
+					}
 				} else {
 					pthread_create(&thread_lan, NULL, lan_thread, 0);
 					printf(_(">> 认证掉线，已发回客户端并重新启用对LAN的监听\n"));
