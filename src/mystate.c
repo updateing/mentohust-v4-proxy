@@ -577,7 +577,7 @@ static int waitEchoPacket()
 
 static int waitClientStart()
 {
-	printf(_(">> 正在等待客户端发起认证...\n"));
+	printf(_("[%s] >> 正在等待客户端发起认证...\n"), get_formatted_date());
 	return 0;
 }
 
