@@ -342,6 +342,7 @@ static int readFile(int *daemonMode)
 	showNotify = getInt(buf, "MentoHUST", "ShowNotify", D_SHOWNOTIFY) % 21;
 #endif
 	*daemonMode = getInt(buf, "MentoHUST", "DaemonMode", D_DAEMONMODE) % 4;
+	restartOnLogOff = getInt(buf, "MentoHUST", "RestartOnLogOff", D_RESTARTONLOGOFF);
 	maxFail = getInt(buf, "MentoHUST", "MaxFail", D_MAXFAIL);
 	free(buf);
 	return 0;
@@ -625,6 +626,7 @@ static void saveConfig(int daemonMode)
 	setInt(&buf, "MentoHUST", "DhcpMode", dhcpMode);
 	setInt(&buf, "MentoHUST", "StartMode", startMode);
 	setInt(&buf, "MentoHUST", "MaxFail", maxFail);
+	setInt(&buf, "MentoHUST", "RestartOnLogOff", restartOnLogOff);
 	setInt(&buf, "MentoHUST", "RestartWait", restartWait);
 	setInt(&buf, "MentoHUST", "EchoInterval", echoInterval);
 	setInt(&buf, "MentoHUST", "Timeout", timeout);
