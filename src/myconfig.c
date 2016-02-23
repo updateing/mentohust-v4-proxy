@@ -526,6 +526,7 @@ static int getAdapter()
 
 static void printConfig()
 {
+	char **tmp; // For argument parsing
 	char *addr[] = {_("标准"), _("锐捷"), _("赛尔")};
 	char *dhcp[] = {_("不使用"), _("二次认证"), _("认证后"), _("认证前")};
 	if (proxyMode == 0) {
@@ -562,7 +563,7 @@ static void printConfig()
     {
 		printf(_("** DHCP脚本:\t"));
         dhcpArguements = yash_args(dhcpScript);
-        for(char **tmp = dhcpArguements; tmp != 0 && *tmp != 0; tmp++)
+        for(tmp = dhcpArguements; tmp != 0 && *tmp != 0; tmp++)
         {
             puts(*tmp);
         }
