@@ -1008,7 +1008,7 @@ unsigned char *computeV4(const unsigned char *src, int len)
     int i;
 
     uint32_t v4_check_type = ((signed char)s[0] + (signed char)s[3]) % 5u;
-    printf("V4 type: %d\n", v4_check_type);
+    //printf("V4 type: %d\n", v4_check_type);
     switch(v4_check_type)
     {
         case 0:
