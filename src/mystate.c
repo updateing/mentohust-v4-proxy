@@ -383,7 +383,7 @@ static int renewIP()
             {
                 execvp(dhcpArguements[0], dhcpArguements);
                 printf("Mentohust[Error]: Running dhcpScript failed.\n");
-                exit(-1);
+				abort();
             }
             else if(cpid < 0)
                 printf("Fork dhcpScript failed.\n");
