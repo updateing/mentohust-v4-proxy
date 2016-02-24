@@ -171,8 +171,8 @@ static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_c
 	case EAPOL_START:
 		switch (mac_status) {
 		case MAC_NOT_DEFINED:
-			printf(_("[%s] >> 客户端%s正在发起认证\n"), get_formatted_date(), formatHex(clientMAC, 6));
 			proxy_store_client_mac(buf); // 锁定客户端的MAC地址，以防不同设备的认证流程干扰
+			printf(_("[%s] >> 客户端%s正在发起认证\n"), get_formatted_date(), formatHex(clientMAC, 6));
 			proxyClientRequested = 1;
 			switchState(ID_START);
 			break;
@@ -182,7 +182,7 @@ static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_c
 				goto DONE;
 			} else {
 				/* 这里一般是多次认证（-j参数大于1时） */
-				printf(_("[%s] >> 客户端%s再次发起认证\n"), formatHex(clientMAC, 6), get_formatted_date());
+				printf(_("[%s] >> 客户端%s再次发起认证\n"), get_formatted_date(), formatHex(clientMAC, 6));
 				switchState(ID_START);
 			}
 			break;
@@ -228,7 +228,7 @@ static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_c
 	goto DONE;
 
 PROXY_INTERRUPTED:
-	printf(_("[%s] !! 认证流程受到来自%s的干扰！\n"), formatHex(hdr->eth_hdr.src_mac, 6), get_formatted_date());
+	printf(_("[%s] !! 认证流程受到来自%s的干扰！\n"), get_formatted_date(), formatHex(hdr->eth_hdr.src_mac, 6));
 DONE:
 	return;
 }
