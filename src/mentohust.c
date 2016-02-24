@@ -234,8 +234,7 @@ DONE:
 static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char *buf)
 {
 	static unsigned failCount = 0;
-	u_char* mod_buf;
-    pthread_t thread_lan;
+	pthread_t thread_lan;
 
 #ifndef NO_ARP
 	if (buf[0x0c]==0x88 && buf[0x0d]==0x8e) {
