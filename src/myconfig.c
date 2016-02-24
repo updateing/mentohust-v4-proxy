@@ -461,7 +461,7 @@ static void showHelp(const char *fileName)
 		"\t-e 心跳间隔(秒)[默认30]\n"
 		"\t-r 失败等待(秒)[默认15]\n"
 		"\t-l 允许失败次数[0表示无限制，默认8]\n"
-		"\t-x 认证掉线后不重连[0为不重连，1为重连，默认1]\n"
+		"\t-x 掉线后是否自动重连: 0(不重连) 1(重连) [默认1]\n"
 		"\t-a 组播地址: 0(标准) 1(锐捷) 2(赛尔) [默认0]\n"
 		"\t-d DHCP方式: 0(不使用) 1(二次认证) 2(认证后) 3(认证前) [默认0]\n"
 		"\t-b 是否后台运行: 0(否) 1(是，关闭输出) 2(是，保留输出) 3(是，输出到文件) [默认0]\n"
@@ -475,7 +475,8 @@ static void showHelp(const char *fileName)
 		"\t-j 认证代理模式下关闭LAN监听线程前需要收到的Success包次数 [默认1]\n"
 		"\t-q 显示SuConfig.dat的内容(如-q/path/SuConfig.dat)\n"
 		"例如:\t%s -uusername -ppassword -neth0 -i192.168.0.1 -m255.255.255.0 -g0.0.0.0 -s0.0.0.0 -o0.0.0.0 -t8 -e30 -r15 -a0 -d1 -b0 -v4.10 -fdefault.mpf -cdhclient\n"
-		"关于代理模式：此模式下MentoHUST将不会自己发起认证，而是修改LAN内捕获到的认证数据包的源MAC并转发至WAN，使得本机认证通过。此模式下用户名和密码（-u和-p）无效，可不指定。\n"
+		"关于代理模式：此模式下MentoHUST将不会自己发起认证，而是修改LAN内捕获到的认证数据包的源MAC并转发至WAN，使得本机认证通过。\n"
+		"代理模式下用户名、密码、掉线重连方式（-u、-p、-x）无效，可不指定。由于Start包为自行构造，仍然需要指定DHCP方式和组播地址（-d、-a）。\n"
 		"代理模式示例:\t%s -zeth1 -neth0 -a1 -d2 -j2\n"
 		"注意：使用时请确保是以root权限运行！\n\n");
 	printf(helpString, fileName, fileName, fileName);

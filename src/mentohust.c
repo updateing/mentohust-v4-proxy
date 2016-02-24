@@ -247,7 +247,7 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 		if (buf[0x0F]==0x00 && buf[0x12]==0x01 && buf[0x16]==0x01) {	/* 验证用户名 */
 			if (startMode < 3) {
 				memcpy(destMAC, buf+6, 6);
-				printf(_("[%s] ** 认证MAC:\t%s\n"), get_formatted_date(), formatHex(destMAC, 6));
+				printf(_("[%s] ** 认证服务器MAC: %s\n"), get_formatted_date(), formatHex(destMAC, 6));
 				startMode += 3;	/* 标记认证服务器MAC为已获取，可以锁定 */
 			}
 			if (proxyMode == 0) {
