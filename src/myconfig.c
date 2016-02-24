@@ -534,11 +534,12 @@ static void printConfig()
 		printf(_("** 用户名:\t%s\n"), userName);
 		/* printf("** 密码:\t%s\n", password); */
 		printf(_("** 网卡: \t%s\n"), nic);
+		printf(_("** 掉线后重连:\t%s\n"), restartOnLogOff ? "是" : "否");
 	} else {
 		printf(_("** 已启用代理模式\n"));
 		printf(_("** WAN网卡: \t%s\n"), nic);
 		printf(_("** LAN网卡: \t%s\n"), nicLan);
-		printf(_("** 要求成功: \t%d次\n"), proxyRequireSuccessCount);
+		printf(_("** 成功要求: \t%d次\n"), proxyRequireSuccessCount);
 	}
 	if (gateway)
 		printf(_("** 网关地址:\t%s\n"), formatIP(gateway));
@@ -551,7 +552,6 @@ static void printConfig()
 	printf(_("** 失败等待:\t%u秒\n"), restartWait);
 	if (maxFail)
 		printf(_("** 允许失败:\t%u次\n"), maxFail);
-	printf(_("** 掉线后重连:\t%s\n"), restartOnLogOff ? "是" : "否");
 	printf(_("** 组播地址:\t%s\n"), addr[startMode]);
 	printf(_("** DHCP方式:\t%s\n"), dhcp[dhcpMode]);
 #ifndef NO_NOTIFY
