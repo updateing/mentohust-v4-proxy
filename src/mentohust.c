@@ -177,7 +177,7 @@ static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_c
 			switchState(ID_START);
 			break;
 		case MAC_CHECK_PASSED:
-			if (state == ID_ECHO || state == ID_WAITECHO) {
+			if (proxySuccessCount < proxySuccessCount && (state == ID_ECHO || state == ID_WAITECHO)) {
 				printf(_("[%s] !! 客户端在认证完成后发送Start包，忽略\n"), get_formatted_date());
 				goto DONE;
 			} else {
