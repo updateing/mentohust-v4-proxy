@@ -44,7 +44,7 @@ extern u_char localMAC[], destMAC[];
 extern unsigned timeout;
 extern unsigned echoInterval;
 extern unsigned restartWait;
-extern char *dhcpScript;
+extern char dhcpScript[];
 extern pcap_t *hPcap;
 extern u_char *fillBuf;
 extern unsigned fillSize;
@@ -364,6 +364,7 @@ static int renewIP()
 	setTimer(0);	/* 取消定时器 */
 	printf(_("[%s] >> 正在获取IP...\n"), get_formatted_date());
     setreuid(0,0);
+    printf("%s\n", dhcpScript);
 	system(dhcpScript);
     printf(_("[%s] >> 操作结束。\n"), get_formatted_date());
 	dhcpMode += 3; /* 标记为已获取，123变为456，5不需再认证*/
