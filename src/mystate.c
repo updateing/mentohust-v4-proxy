@@ -44,7 +44,7 @@ extern u_char localMAC[], destMAC[];
 extern unsigned timeout;
 extern unsigned echoInterval;
 extern unsigned restartWait;
-extern char **dhcpArguements;
+extern char *dhcpScript;
 extern pcap_t *hPcap;
 extern u_char *fillBuf;
 extern unsigned fillSize;
@@ -57,7 +57,6 @@ static void sendArpPacket();	/* ARP监视 */
 #endif
 
 static const u_char pad[] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-static pid_t cpid;
 static const unsigned char pkt1[503] = {
 /*0x00, 0x00, */0xff, 0xff, 0x37, 0x77, 0x7f, 0xff, /* ....7w.. */
 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, /* ........ */
@@ -362,7 +361,6 @@ int restart()
 
 static int renewIP()
 {
-    int cpidstate;
 	setTimer(0);	/* 取消定时器 */
 	printf(_("[%s] >> 正在获取IP...\n"), get_formatted_date());
     setreuid(0,0);
