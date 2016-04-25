@@ -561,8 +561,7 @@ static void printConfig()
 		printf(_("** 数据文件:\t%s\n"), dataFile);
 	if (dhcpMode != 0)
     {
-		printf(_("** DHCP脚本:\t"));
-        printf("%s/n", dhcpScript);
+		printf(_("** DHCP脚本:\t%s\n"), dhcpScript);
     }
 }
 
