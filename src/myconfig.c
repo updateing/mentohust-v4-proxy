@@ -19,7 +19,7 @@ static const char *PACKAGE_BUGREPORT = "http://code.google.com/p/mentohust/issue
 #include "myini.h"
 #include "myfunc.h"
 #include "dlfunc.h"
-#include "util.h"
+#include "logging.h"
 #include <string.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -251,7 +251,7 @@ void initConfig(int argc, char **argv)
 	}
 	if (proxyMode != 0 && nicLan[0] == '\0')
 	{
-		printf(_("!! 代理模式下必须在命令行上指定LAN网卡（-z）！\n"));
+		print_log(_("!! 代理模式下必须在命令行上指定LAN网卡（-z）！\n"));
 		exit(EXIT_FAILURE);
 	}
 	if (proxyMode == 0 && (userName[0]=='\0' || password[0]=='\0'))	/* 不使用代理时，未写用户名密码？ */
@@ -581,7 +581,7 @@ static void readArg(char argc, char **argv, int *saveFlag, int *exitFlag, int *d
 			else if (c == 'x')
 				restartOnLogOff = atoi(str+2);
 			else
-				printf(_("!! 未知选项: %s\n"), str);
+				print_log(_("!! 未知选项: %s\n"), str);
 		}
 	}
 #endif
@@ -714,7 +714,7 @@ static int getAdapter()
 	char errbuf[PCAP_ERRBUF_SIZE];
 	if (pcap_findalldevs(&alldevs, errbuf)==-1 || alldevs==NULL)
 	{
-		printf(_("!! 查找网卡失败: %s\n"), errbuf);
+		print_log(_("!! 查找网卡失败: %s\n"), errbuf);
 		return -1;
 	}
 	for (d=alldevs; d!=NULL; d=d->next)
@@ -722,7 +722,7 @@ static int getAdapter()
 		num++;
 		if (!(d->flags & PCAP_IF_LOOPBACK) && strcmp(d->name, "any")!=0)
 		{
-			printf(_("** 网卡[%d]:\t%s\n"), num, d->name);
+			print_log(_("** 网卡[%d]:\t%s\n"), num, d->name);
 			avail++;
 			i = num;
 		}
@@ -730,19 +730,19 @@ static int getAdapter()
 	if (avail == 0)
 	{
 		pcap_freealldevs(alldevs);
-		printf(_("!! 找不到网卡！\n"));
+		print_log(_("!! 找不到网卡！\n"));
 		return -1;
 	}
 	if (avail > 1)
 	{
-		printf(_("?? 请选择网卡[1-%d]: "), num);
+		print_log(_("?? 请选择网卡[1-%d]: "), num);
 		scanf("%d", &i);
 		if (i < 1)
 			i = 1;
 		else if (i > num)
 			i = num;
 	}
-	printf(_("** 您选择了第[%d]块网卡。\n"), i);
+	print_log(_("** 您选择了第[%d]块网卡。\n"), i);
 	for (d=alldevs; i>1; d=d->next, i--);
 	strncpy(nic, d->name, sizeof(nic)-1);
 	pcap_freealldevs(alldevs);
@@ -751,42 +751,41 @@ static int getAdapter()
 
 static void printConfig()
 {
-	char **tmp; // For argument parsing
 	char *addr[] = {_("标准"), _("锐捷"), _("赛尔")};
 	char *dhcp[] = {_("不使用"), _("二次认证"), _("认证后"), _("认证前")};
 	if (proxyMode == 0) {
-		printf(_("** 用户名:\t%s\n"), userName);
+		print_log(_("** 用户名:\t%s\n"), userName);
 		/* printf("** 密码:\t%s\n", password); */
-		printf(_("** 网卡: \t%s\n"), nic);
-		printf(_("** 掉线后重连:\t%s\n"), restartOnLogOff ? "是" : "否");
+		print_log(_("** 网卡: \t%s\n"), nic);
+		print_log(_("** 掉线后重连:\t%s\n"), restartOnLogOff ? "是" : "否");
 	} else {
-		printf(_("** 已启用代理模式\n"));
-		printf(_("** WAN网卡: \t%s\n"), nic);
-		printf(_("** LAN网卡: \t%s\n"), nicLan);
-		printf(_("** 成功要求: \t%d次\n"), proxyRequireSuccessCount);
+		print_log(_("** 已启用代理模式\n"));
+		print_log(_("** WAN网卡: \t%s\n"), nic);
+		print_log(_("** LAN网卡: \t%s\n"), nicLan);
+		print_log(_("** 成功要求: \t%d次\n"), proxyRequireSuccessCount);
 	}
 	if (gateway)
-		printf(_("** 网关地址:\t%s\n"), formatIP(gateway));
+		print_log(_("** 网关地址:\t%s\n"), formatIP(gateway));
 	if (dns)
-		printf(_("** DNS地址:\t%s\n"), formatIP(dns));
+		print_log(_("** DNS地址:\t%s\n"), formatIP(dns));
 	if (pingHost)
-		printf(_("** 智能重连:\t%s\n"), formatIP(pingHost));
-	printf(_("** 认证超时:\t%u秒\n"), timeout);
-	printf(_("** 心跳间隔:\t%u秒\n"), echoInterval);
-	printf(_("** 失败等待:\t%u秒\n"), restartWait);
+		print_log(_("** 智能重连:\t%s\n"), formatIP(pingHost));
+	print_log(_("** 认证超时:\t%u秒\n"), timeout);
+	print_log(_("** 心跳间隔:\t%u秒\n"), echoInterval);
+	print_log(_("** 失败等待:\t%u秒\n"), restartWait);
 	if (maxFail)
-		printf(_("** 允许失败:\t%u次\n"), maxFail);
-	printf(_("** 组播地址:\t%s\n"), addr[startMode]);
-	printf(_("** DHCP方式:\t%s\n"), dhcp[dhcpMode]);
+		print_log(_("** 允许失败:\t%u次\n"), maxFail);
+	print_log(_("** 组播地址:\t%s\n"), addr[startMode]);
+	print_log(_("** DHCP方式:\t%s\n"), dhcp[dhcpMode]);
 #ifndef NO_NOTIFY
 	if (showNotify)
-		printf(_("** 通知超时:\t%d秒\n"), showNotify);
+		print_log(_("** 通知超时:\t%d秒\n"), showNotify);
 #endif
 	if (bufType >= 2)
-		printf(_("** 数据文件:\t%s\n"), dataFile);
+		print_log(_("** 数据文件:\t%s\n"), dataFile);
 	if (dhcpMode != 0)
     {
-		printf(_("** DHCP脚本:\t%s\n"), dhcpScript);
+		print_log(_("** DHCP脚本:\t%s\n"), dhcpScript);
     }
 }
 
@@ -803,7 +802,7 @@ static int openPcap()
 	// TODO 在LAN接口上暂时强制使用混杂模式
 	if (proxyMode != 0 && ((hPcapLan = pcap_open_live(nicLan, 2048, 1, 1000, buf)) == NULL))
 	{
-		printf(_("!! 打开LAN网卡%s失败: %s\n"), nicLan, buf);
+		print_log(_("!! 打开LAN网卡%s失败: %s\n"), nicLan, buf);
 		return -1;
 	}
 	fmt = formatHex(localMAC, 6);
@@ -817,7 +816,7 @@ static int openPcap()
 	if (pcap_compile(hPcap, &fcode, buf, 0, 0xffffffff) == -1
 			|| pcap_setfilter(hPcap, &fcode) == -1)
 	{
-		printf(_("!! 设置pcap过滤器失败: %s\n"), pcap_geterr(hPcap));
+		print_log(_("!! 设置pcap过滤器失败: %s\n"), pcap_geterr(hPcap));
 		return -1;
 	}
 	pcap_freecode(&fcode);
@@ -826,7 +825,7 @@ static int openPcap()
 		if (pcap_compile(hPcapLan, &fcode, buf, 0, 0xffffffff) == -1
 				|| pcap_setfilter(hPcapLan, &fcode) == -1)
 		{
-			printf(_("!! 为LAN设置pcap过滤器失败: %s\n"), pcap_geterr(hPcapLan));
+			print_log(_("!! 为LAN设置pcap过滤器失败: %s\n"), pcap_geterr(hPcapLan));
 			return -1;
 		}
 		pcap_freecode(&fcode);
@@ -876,9 +875,9 @@ static void saveConfig(int daemonMode)
 #endif
 	setString(&buf, "MentoHUST", "Username", userName);
 	if (saveFile(buf, CFG_FILE) != 0)
-		printf(_("!! 保存认证参数到%s失败！\n"), CFG_FILE);
+		print_log(_("!! 保存认证参数到%s失败！\n"), CFG_FILE);
 	else
-		printf(_("** 认证参数已成功保存到%s.\n"), CFG_FILE);
+		print_log(_("** 认证参数已成功保存到%s.\n"), CFG_FILE);
 	free(buf);
 }
 
@@ -900,21 +899,21 @@ static void checkRunning(int exitFlag, int daemonMode)
 	}
 	if (exitFlag) {
 		if (fl.l_type != F_UNLCK) {
-			printf(_("[%s] >> 已发送退出信号给MentoHUST进程(PID=%d).\n"), get_formatted_date(), fl.l_pid);
+			print_log(_(">> 已发送退出信号给MentoHUST进程(PID=%d).\n"), fl.l_pid);
 			if (kill(fl.l_pid, SIGINT) == -1)
 				perror(_("!! 结束进程失败"));
 		}
 		else
-			printf(_("[%s] !! 没有MentoHUST正在运行！\n"), get_formatted_date());
+			print_log(_("!! 没有MentoHUST正在运行！\n"));
 		if (exitFlag == 1)
 			exit(EXIT_SUCCESS);
 	}
 	else if (fl.l_type != F_UNLCK) {
-		printf(_("[%s] !! MentoHUST已经运行(PID=%d)!\n"), get_formatted_date(), fl.l_pid);
+		print_log(_("!! MentoHUST已经运行(PID=%d)!\n"), fl.l_pid);
 		exit(EXIT_FAILURE);
 	}
 	if (daemonMode) {	/* 貌似我过早进入后台模式了，就给个选项保留输出或者输出到文件吧 */
-		printf(_("[%s] >> 进入后台运行模式，使用参数-k可退出认证。\n"), get_formatted_date());
+		print_log(_(">> 进入后台运行模式，使用参数-k可退出认证。\n"));
 #ifndef __UCLIBC__
 		if (daemon(0, (daemonMode+1)%2))
 #else

@@ -16,7 +16,7 @@
 #include "mystate.h"
 #include "myfunc.h"
 #include "dlfunc.h"
-#include "util.h"
+#include "logging.h"
 #include "packet_header.h"
 #include "proxy_util.h"
 #include <pthread.h>
@@ -87,12 +87,10 @@ int main(int argc, char **argv)
 
 static void* wan_thread()
 {
-	char err[100];
 	char* err_base[2] = { _("!! 捕获数据包失败，请检查网络连接！\n"),
 						  _("!! 从WAN捕获数据包失败，请检查网络连接！\n") };
-	sprintf(err, "[%s] %s", get_formatted_date(), err_base[proxyMode == 1]);
 	if (-1 == pcap_loop(hPcap, -1, pcap_handle, NULL)) { /* 开始捕获数据包 */
-		printf("%s", err);
+		print_log("%s", err_base[proxyMode == 1]);
 #ifndef NO_NOTIFY
 		if (showNotify && show_notify(_("MentoHUST - 错误提示"),
 			err_base[proxyMode == 1], 1000*showNotify) < 0)
@@ -105,7 +103,7 @@ static void* wan_thread()
 static void* lan_thread()
 {
 	if (-1 == pcap_loop(hPcapLan, -1, pcap_handle_lan, NULL)) { /* 开始捕获数据包 */
-		printf(_("[%s] !! 从LAN捕获数据包失败，请检查网络连接！\n"), get_formatted_date());
+		print_log(_("!! 从LAN捕获数据包失败，请检查网络连接！\n"));
 #ifndef NO_NOTIFY
 		if (showNotify && show_notify(_("MentoHUST - 错误提示"),
 			_("!! 从LAN捕获数据包失败，请检查网络连接！\n"), 1000*showNotify) < 0)
@@ -133,7 +131,7 @@ static void exit_handle(void)
 #ifndef NO_DYLOAD
 	free_libpcap();
 #endif
-	printf(_("[%s] >> 认证已退出。\n"), get_formatted_date());
+	print_log(_(">> 认证已退出。\n"));
 }
 
 static void sig_handle(int sig)
@@ -143,7 +141,7 @@ static void sig_handle(int sig)
 		if (-1 == switchState(state))
 		{
 			pcap_breakloop(hPcap);
-			printf(_("[%s] !! 发送数据包失败, 请检查网络连接！\n"), get_formatted_date());
+			print_log(_("!! 发送数据包失败, 请检查网络连接！\n"));
 #ifndef NO_NOTIFY
 			if (showNotify && show_notify(_("MentoHUST - 错误提示"),
 				_("发送数据包失败, 请检查网络连接！"), 1000*showNotify) < 0)
@@ -172,17 +170,17 @@ static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_c
 		switch (mac_status) {
 		case MAC_NOT_DEFINED:
 			proxy_store_client_mac(buf); // 锁定客户端的MAC地址，以防不同设备的认证流程干扰
-			printf(_("[%s] >> 客户端%s正在发起认证\n"), get_formatted_date(), formatHex(clientMAC, 6));
+			print_log(_(">> 客户端%s正在发起认证\n"), formatHex(clientMAC, 6));
 			proxyClientRequested = 1;
 			switchState(ID_START);
 			break;
 		case MAC_CHECK_PASSED:
 			if (proxySuccessCount < proxySuccessCount && (state == ID_ECHO || state == ID_WAITECHO)) {
-				printf(_("[%s] !! 客户端在认证完成后发送Start包，忽略\n"), get_formatted_date());
+				print_log(_("!! 客户端在认证完成后发送Start包，忽略\n"));
 				goto DONE;
 			} else {
 				/* 这里一般是多次认证（-j参数大于1时） */
-				printf(_("[%s] >> 客户端%s再次发起认证\n"), get_formatted_date(), formatHex(clientMAC, 6));
+				print_log(_(">> 客户端%s再次发起认证\n"), formatHex(clientMAC, 6));
 				switchState(ID_START);
 			}
 			break;
@@ -197,7 +195,7 @@ static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_c
 		case MAC_NOT_DEFINED:
 			goto DONE;
 		case MAC_CHECK_PASSED:
-			printf(_("[%s] !! 客户端要求断开认证，将忽略此请求\n"), get_formatted_date());
+			print_log(_("!! 客户端要求断开认证，将忽略此请求\n"));
 			goto DONE;
 		}
 	case EAP_PACKET:
@@ -210,10 +208,10 @@ static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_c
 			eap_type_int = hdr->eap_hdr.type;
 			switch (eap_type_int) {
 			case IDENTITY:
-				printf(_("[%s] >> 客户端已发送用户名\n"), get_formatted_date());
+				print_log(_(">> 客户端已发送用户名\n"));
 				break;
 			case MD5_CHALLENGE:
-				printf(_("[%s] >> 客户端已发送密码\n"), get_formatted_date());
+				print_log(_(">> 客户端已发送密码\n"));
 				break;
 			}
 			break;
@@ -228,7 +226,7 @@ static void pcap_handle_lan(u_char *user, const struct pcap_pkthdr *h, const u_c
 	goto DONE;
 
 PROXY_INTERRUPTED:
-	printf(_("[%s] !! 认证流程受到来自%s的干扰！\n"), get_formatted_date(), formatHex(hdr->eth_hdr.src_mac, 6));
+	print_log(_("!! 认证流程受到来自%s的干扰！\n"), formatHex(hdr->eth_hdr.src_mac, 6));
 DONE:
 	return;
 }
@@ -247,7 +245,7 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 		if (buf[0x0F]==0x00 && buf[0x12]==0x01 && buf[0x16]==0x01) {	/* 验证用户名 */
 			if (startMode < 3) {
 				memcpy(destMAC, buf+6, 6);
-				printf(_("[%s] ** 认证服务器MAC: %s\n"), get_formatted_date(), formatHex(destMAC, 6));
+				print_log(_("** 认证服务器MAC: %s\n"), formatHex(destMAC, 6));
 				startMode += 3;	/* 标记认证服务器MAC为已获取，可以锁定 */
 			}
 			if (proxyMode == 0) {
@@ -256,10 +254,10 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 				switchState(ID_IDENTITY);
 			} else {
 				if (proxyClientRequested == 1) {
-					printf(_("[%s] >> 服务器已请求用户名\n"), get_formatted_date());
+					print_log(_(">> 服务器已请求用户名\n"));
 					proxy_send_to_lan(buf, h->len);
 				} else {
-					printf(_("[%s] !! 在代理认证完成后收到用户名请求，将重启认证！\n"), get_formatted_date());
+					print_log(_("!! 在代理认证完成后收到用户名请求，将重启认证！\n"));
 					switchState(ID_WAITCLIENT);
 				}
 			}
@@ -269,16 +267,16 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 				switchState(ID_CHALLENGE);
 			} else {
 				if (proxyClientRequested == 1) {
-					printf(_("[%s] >> 服务器已请求密码\n"), get_formatted_date());
+					print_log(_(">> 服务器已请求密码\n"));
 					proxy_send_to_lan(buf, h->len);
 				} else {
-					printf(_("[%s] !! 在代理认证完成后收到密码请求，将重启认证！\n"), get_formatted_date());
+					print_log(_("!! 在代理认证完成后收到密码请求，将重启认证！\n"));
 					switchState(ID_WAITCLIENT);
 				}
 			}
 		}
 		else if (buf[0x0F]==0x00 && buf[0x12]==0x03) {	/* 认证成功 */
-			printf(_("[%s] >> 认证成功!\n"), get_formatted_date());
+			print_log(_(">> 认证成功!\n"));
 			failCount = 0;
 			proxySuccessCount++;
 			if (proxyMode != 0) {
@@ -289,7 +287,7 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 					proxySuccessCount = 0;
 					memcpy(lastSuccessClientMAC, clientMAC, 6); // 备份本次认证成功的客户端MAC，用于通知掉线
 					proxy_clear_client_mac(); // 重设MAC地址，以备下次使用不同客户端认证用
-					printf(_("[%s] >> 已关闭LAN监听线程\n"), get_formatted_date());
+					print_log(_(">> 已关闭LAN监听线程\n"));
 				}
 			}
 			if (!(startMode%3 == 2)) {
@@ -310,17 +308,17 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 		else if (buf[0x0F]==0x00 && buf[0x12]==0x04) {  /* 认证失败或被踢下线 */
 			if (state==ID_WAITECHO || state==ID_ECHO) {
 				if (proxyMode == 0) {
-					printf(_("[%s] >> 认证掉线！\n"), get_formatted_date());
+					print_log(_(">> 认证掉线！\n"));
 					showRuijieMsg(buf, h->caplen);
 					if (restartOnLogOff) {
-						printf(_("[%s] >> 正在重新认证...\n"), get_formatted_date());
+						print_log(_(">> 正在重新认证...\n"));
 						switchState(ID_START);					
 					} else {
 						exit(1);
 					}
 				} else {
 					pthread_create(&thread_lan, NULL, lan_thread, 0);
-					printf(_("[%s] >> 认证掉线，已发回客户端并重新启用对LAN的监听\n"), get_formatted_date());
+					print_log(_(">> 认证掉线，已发回客户端并重新启用对LAN的监听\n"));
 					showRuijieMsg(buf, h->caplen);
 					// clientMAC已经在成功时被清除了，所以使用lastSuccessClientMAC发送，发完清除
 					memmove(clientMAC, lastSuccessClientMAC, 6);
@@ -330,10 +328,10 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 				}
 			}
 			else if (buf[0x1b]!=0 || startMode%3==2) {
-				printf(_("[%s] >> 认证失败!\n"), get_formatted_date());
+				print_log(_(">> 认证失败!\n"));
 				showRuijieMsg(buf, h->caplen);
 				if (maxFail && ++failCount>=maxFail) {
-					printf(_("[%s] >> 连续认证失败%u次，退出认证。\n"), get_formatted_date(), maxFail);
+					print_log(_(">> 连续认证失败%u次，退出认证。\n"), maxFail);
 					exit(EXIT_SUCCESS);
 				}
 				restart();
@@ -350,12 +348,12 @@ static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char 
 			char str[50];
 			if (gateMAC[0] == 0xFF) {
 				memcpy(gateMAC, buf+0x16, 6);
-				printf(_("** 网关MAC:\t%s\n"), formatHex(gateMAC, 6));
+				print_log(_("** 网关MAC:\t%s\n"), formatHex(gateMAC, 6));
 				sprintf(str, "arp -s %s %s", formatIP(gateway), formatHex(gateMAC, 6));
 				system(str);
 			} else if (buf[0x15]==0x02 && *(u_int32_t *)(buf+0x26)==rip
 				&& memcmp(gateMAC, buf+0x16, 6)!=0) {
-				printf(_("** ARP欺骗:\t%s\n"), formatHex(buf+0x16, 6));
+				print_log(_("** ARP欺骗:\t%s\n"), formatHex(buf+0x16, 6));
 #ifndef NO_NOTIFY
 				if (showNotify) {
 					sprintf(str, _("欺骗源: %s"), formatHex(buf+0x16, 6));
@@ -379,7 +377,7 @@ static void showRuijieMsg(const u_char *buf, unsigned bufLen)
 			length = strlen(serverMsg);
 		if (length>0 && (serverMsg=gbk2utf(serverMsg, length))!=NULL) {
 			if (strlen(serverMsg)) {
-				printf(_("[%s] $$ 系统提示:\n%s\n"), get_formatted_date(), serverMsg);
+				print_log(_("$$ 系统提示:\n%s\n"), serverMsg);
 #ifndef NO_NOTIFY
 				if (showNotify && show_notify(_("MentoHUST - 系统提示"),
 					serverMsg, 1000*showNotify) < 0)
@@ -398,7 +396,7 @@ static void showRuijieMsg(const u_char *buf, unsigned bufLen)
 		for (; *serverMsg=='\r'||*serverMsg=='\n'; serverMsg++,length--);
 		if (length>0 && (serverMsg=gbk2utf(serverMsg, length))!=NULL) {
 			if (strlen(serverMsg)) {
-				printf(_("[%s] $$ 计费提示:\n%s\n"), get_formatted_date(), serverMsg);
+				print_log(_("$$ 计费提示:\n%s\n"), serverMsg);
 #ifndef NO_NOTIFY
 				if (showNotify && show_notify(_("MentoHUST - 计费提示"),
 					serverMsg, 1000*showNotify) < 0)
@@ -418,7 +416,7 @@ static void showCernetMsg(const u_char *buf)
 		length = strlen(serverMsg);
 	if (length>0 && (serverMsg=gbk2utf(serverMsg, length))!=NULL)
 	{
-		printf(_("$$ 系统提示:\t%s\n"), serverMsg);
+		print_log(_("$$ 系统提示:\t%s\n"), serverMsg);
 #ifndef NO_NOTIFY
 			if (showNotify && show_notify(_("MentoHUST - 系统提示"),
 				serverMsg, 1000*showNotify) < 0)
