@@ -714,7 +714,7 @@ static int getAdapter()
 	char errbuf[PCAP_ERRBUF_SIZE];
 	if (pcap_findalldevs(&alldevs, errbuf)==-1 || alldevs==NULL)
 	{
-		print_log(_("!! 查找网卡失败: %s\n"), errbuf);
+		printf(_("!! 查找网卡失败: %s\n"), errbuf);
 		return -1;
 	}
 	for (d=alldevs; d!=NULL; d=d->next)
@@ -722,7 +722,7 @@ static int getAdapter()
 		num++;
 		if (!(d->flags & PCAP_IF_LOOPBACK) && strcmp(d->name, "any")!=0)
 		{
-			print_log(_("** 网卡[%d]:\t%s\n"), num, d->name);
+			printf(_("** 网卡[%d]:\t%s\n"), num, d->name);
 			avail++;
 			i = num;
 		}
@@ -730,19 +730,19 @@ static int getAdapter()
 	if (avail == 0)
 	{
 		pcap_freealldevs(alldevs);
-		print_log(_("!! 找不到网卡！\n"));
+		printf(_("!! 找不到网卡！\n"));
 		return -1;
 	}
 	if (avail > 1)
 	{
-		print_log(_("?? 请选择网卡[1-%d]: "), num);
+		printf(_("?? 请选择网卡[1-%d]: "), num);
 		scanf("%d", &i);
 		if (i < 1)
 			i = 1;
 		else if (i > num)
 			i = num;
 	}
-	print_log(_("** 您选择了第[%d]块网卡。\n"), i);
+	printf(_("** 您选择了第[%d]块网卡。\n"), i);
 	for (d=alldevs; i>1; d=d->next, i--);
 	strncpy(nic, d->name, sizeof(nic)-1);
 	pcap_freealldevs(alldevs);
@@ -899,17 +899,17 @@ static void checkRunning(int exitFlag, int daemonMode)
 	}
 	if (exitFlag) {
 		if (fl.l_type != F_UNLCK) {
-			print_log(_(">> 已发送退出信号给MentoHUST进程(PID=%d).\n"), fl.l_pid);
+			printf(_(">> 已发送退出信号给MentoHUST进程(PID=%d).\n"), fl.l_pid);
 			if (kill(fl.l_pid, SIGINT) == -1)
 				perror(_("!! 结束进程失败"));
 		}
 		else
-			print_log(_("!! 没有MentoHUST正在运行！\n"));
+			printf(_("!! 没有MentoHUST正在运行！\n"));
 		if (exitFlag == 1)
 			exit(EXIT_SUCCESS);
 	}
 	else if (fl.l_type != F_UNLCK) {
-		print_log(_("!! MentoHUST已经运行(PID=%d)!\n"), fl.l_pid);
+		printf(_("!! MentoHUST已经运行(PID=%d)!\n"), fl.l_pid);
 		exit(EXIT_FAILURE);
 	}
 	if (daemonMode) {	/* 貌似我过早进入后台模式了，就给个选项保留输出或者输出到文件吧 */
