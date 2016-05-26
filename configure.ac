@@ -7,6 +7,7 @@ AC_CANONICAL_HOST
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([src/myconfig.h])
 AC_CONFIG_HEADERS([config.h])
+AC_DEFINE_UNQUOTED(CREDIT_ADDITION, "V4 Algorithm by Hu Yunrui 2015-2016.\nNew features by Hamster Tian 2015-2016.", Credits to newer contributors)
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
@@ -61,7 +62,7 @@ AS_IF([test -z "$enable_nls"], [enable_nls="yes"])
 AC_ARG_ENABLE([getopt-long], [AC_HELP_STRING([ --disable-getopt-long], [Don't use long options (and getopt_log())])],
               [], [enable_getopt_long="yes"])
 AS_IF([test "x$enable_getopt_long" = "xno"],
-      [AC_DEFINE(NO_GETOPT_LONG, [], [Define NO_ETOPT_LONG to disable using of getopt_long() to parse options])])
+      [AC_DEFINE(NO_GETOPT_LONG, [], [Define NO_GETOPT_LONG to disable using of getopt_long() to parse options])])
 
 GETTEXT_PACKAGE="$PACKAGE_NAME"
 AC_SUBST(GETTEXT_PACKAGE)

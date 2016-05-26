@@ -12,6 +12,7 @@
 #else
 static const char *VERSION = "0.3.1";
 static const char *PACKAGE_BUGREPORT = "http://code.google.com/p/mentohust/issues/list";
+static const char *CREDIT_ADDITION = "V4 Algorithm by Hu Yunrui, new features by Hamster Tian";
 #endif
 
 #include "myconfig.h"
