@@ -152,6 +152,7 @@ static void sig_handle(int sig)
 	}
 	else	/* 退出 */
 	{
+		print_log(_("!! 收到信号：%s (%d)\n"), strsignal(sig), sig);
 		pcap_breakloop(hPcap);
 		if (hPcapLan != NULL) pcap_breakloop(hPcapLan);
 		exit(EXIT_SUCCESS);
