@@ -100,6 +100,7 @@ static int openPcap();	/* 初始化pcap、设置过滤器 */
 static void saveConfig(int daemonMode);	/* 保存参数 */
 static void applyDaemonMode(int daemonMode); /* 应用是否后台的设置 */
 static void checkRunningInstance(int exitFlag);	/* 检测是否有已运行的实例，并按要求终止 */
+static void lockPidFile();	/* PID文件上锁 */
 #ifdef __UCLIBC__
 static int uclibc_daemon(int nochdir, int noclose); /* uClibc中daemon后pthread_create阻塞的解决办法 */
 #endif
@@ -235,6 +236,7 @@ void initConfig(int argc, char **argv)
 	readArg(argc, argv, &saveFlag, &exitFlag, &daemonMode);
 	checkRunningInstance(exitFlag);
 	applyDaemonMode(daemonMode);
+	lockPidFile();
 
 	/* 只在日志上打印 */
 	print_log_raw("========================\n", VERSION);
@@ -939,6 +941,34 @@ static void checkRunningInstance(int exitFlag)
 	else if (fl.l_type != F_UNLCK) {
 		printf(_("!! MentoHUST已经运行(PID=%d)!\n"), fl.l_pid);
 		exit(EXIT_FAILURE);
+	}
+	return;
+
+error_exit:
+#ifndef NO_NOTIFY
+	if (showNotify && show_notify(_("MentoHUST - 错误提示"),
+		_("操作锁文件失败，请检查是否为root权限！"), 1000*showNotify) < 0)
+		showNotify = 0;
+#endif
+	exit(EXIT_FAILURE);
+}
+
+static void lockPidFile() {
+	struct flock fl;
+	if (lockfd < 0) {
+		lockfd = open (LOCK_FILE, O_RDWR|O_CREAT, LOCKMODE);
+		if (lockfd < 0) {
+			perror(_("!! 打开锁文件失败"));
+			goto error_exit;
+		}
+	}
+	fl.l_start = 0;
+	fl.l_whence = SEEK_SET;
+	fl.l_len = 0;
+	fl.l_type = F_WRLCK;
+	if (fcntl(lockfd, F_GETLK, &fl) < 0) {
+		perror(_("!! 获取文件锁失败"));
+		goto error_exit;
 	}
 	fl.l_type = F_WRLCK;
 	fl.l_pid = getpid();
