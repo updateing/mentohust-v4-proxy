@@ -54,7 +54,6 @@ static const char *D_DHCPSCRIPT = "dhcping -v -t 15";	/* 默认DHCP脚本 */
 static const char *D_DHCPSCRIPT = "dhclient";	/* 默认DHCP脚本 */
 #endif
 static const char *CFG_FILE = "/etc/mentohust.conf";	/* 配置文件 */
-static const char *LOG_FILE = "/tmp/mentohust.log";	/* 日志文件 */
 static const char *LOCK_FILE = "/var/run/mentohust.pid";	/* 锁文件 */
 #define LOCKMODE (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)	/* 创建掩码 */
 
@@ -91,14 +90,15 @@ pcap_t *hPcap = NULL;	/* 用于发出认证数据包的Pcap句柄（WAN） */
 pcap_t *hPcapLan = NULL;	/* 用于监听认证数据包的Pcap句柄（LAN，仅在代理模式下使用） */
 int lockfd = -1;	/* 锁文件描述符 */
 
-static int readFile(int *daemonMode);	/* 读取配置文件来初始化 */
+static int readConfigFile(int *daemonMode);	/* 读取配置文件来初始化 */
 static void readArg(char argc, char **argv, int *saveFlag, int *exitFlag, int *daemonMode);	/* 读取命令行参数来初始化 */
 static void showHelp(const char *fileName);	/* 显示帮助信息 */
-static int getAdapter();	/* 查找网卡名 */
+static int askSelectAdapter();	/* 让用户选择网卡名 */
 static void printConfig();	/* 显示初始化后的认证参数 */
 static int openPcap();	/* 初始化pcap、设置过滤器 */
 static void saveConfig(int daemonMode);	/* 保存参数 */
-static void checkRunning(int exitFlag, int daemonMode);	/* 检测是否已运行 */
+static void applyDaemonMode(int daemonMode); /* 应用是否后台的设置 */
+static void checkRunningInstance(int exitFlag);	/* 检测是否有已运行的实例，并按要求终止 */
 #ifdef __UCLIBC__
 static int uclibc_daemon(int nochdir, int noclose); /* uClibc中daemon后pthread_create阻塞的解决办法 */
 #endif
@@ -221,12 +221,24 @@ void initConfig(int argc, char **argv)
 	int exitFlag = 0;	/* 0Nothing 1退出 2重启 */
 	int daemonMode = D_DAEMONMODE;	/* 是否后台运行 */
 
+	/* 只在标准输出上打印 */
 	printf(_("\n欢迎使用MentoHUST\t版本: %s\n"
 			"Copyright (C) 2009-2010 HustMoon Studio\n"
 			"人到华中大，有甜亦有辣。明德厚学地，求是创新家。\n"
-			"Bug report to %s\n\n"), VERSION, PACKAGE_BUGREPORT);
-	saveFlag = (readFile(&daemonMode)==0 ? 0 : 1);
+			"%s\n"
+			"Bug report to %s\n\n"), VERSION, CREDIT_ADDITION, PACKAGE_BUGREPORT);
+
+	/* 环境初始化任务都提前到认证任务之前完成 */
+	set_log_destination(LOG_TO_CONSOLE);
+	saveFlag = (readConfigFile(&daemonMode)==0 ? 0 : 1);
 	readArg(argc, argv, &saveFlag, &exitFlag, &daemonMode);
+	checkRunningInstance(exitFlag);
+	applyDaemonMode(daemonMode);
+
+	/* 只在日志上打印 */
+	print_log_raw("========================\n", VERSION);
+	print_log(_(">> MentoHUST %s 已启动\n"), VERSION);
+
 #ifndef NO_DYLOAD
 	if (load_libpcap() == -1) {
 #ifndef NO_NOTIFY
@@ -240,7 +252,7 @@ void initConfig(int argc, char **argv)
 	if (nic[0] == '\0')
 	{
 		saveFlag = 1;
-		if (getAdapter() == -1) {	/* 找不到（第一块）网卡？ */
+		if (askSelectAdapter() == -1) {	/* 找不到（第一块）网卡？ */
 #ifndef NO_NOTIFY
 		if (showNotify && show_notify(_("MentoHUST - 错误提示"),
 			_("找不到网卡！"), 1000*showNotify) < 0)
@@ -273,7 +285,6 @@ void initConfig(int argc, char **argv)
 		scanf("%u", &dhcpMode);
 		dhcpMode %= 4;
 	}
-	checkRunning(exitFlag, daemonMode);
 	if (startMode%3==2 && gateway==0)	/* 赛尔且未填写网关地址 */
 	{
 		gateway = ip;	/* 据说赛尔的网关是ip前三字节，后一字节是2 */
@@ -295,7 +306,7 @@ void initConfig(int argc, char **argv)
 		saveConfig(daemonMode);
 }
 
-static int readFile(int *daemonMode)
+static int readConfigFile(int *daemonMode)
 {
 	char tmp[16], *buf;
 	if (loadFile(&buf, CFG_FILE) < 0)
@@ -707,7 +718,7 @@ static void showHelp(const char *fileName)
 	exit(EXIT_SUCCESS);
 }
 
-static int getAdapter()
+static int askSelectAdapter()
 {
 	pcap_if_t *alldevs, *d;
 	int num = 0, avail = 0, i;
@@ -881,7 +892,23 @@ static void saveConfig(int daemonMode)
 	free(buf);
 }
 
-static void checkRunning(int exitFlag, int daemonMode)
+static void applyDaemonMode(int daemonMode) {
+	if (daemonMode) {
+		printf(_(">> 进入后台运行模式，使用参数-k可退出认证。\n"));
+#ifndef __UCLIBC__
+		if (daemon(0, (daemonMode+1)%2))
+#else
+		if (uclibc_daemon(0, (daemonMode+1)%2))
+#endif
+			perror(_("!! 后台运行失败"));
+		else if (daemonMode == 3) {
+			/* 更改日志输出到文件 */
+			set_log_destination(LOG_TO_FILE);
+		}
+	}
+}
+
+static void checkRunningInstance(int exitFlag)
 {
 	struct flock fl;
 	lockfd = open (LOCK_FILE, O_RDWR|O_CREAT, LOCKMODE);
@@ -911,20 +938,6 @@ static void checkRunning(int exitFlag, int daemonMode)
 	else if (fl.l_type != F_UNLCK) {
 		printf(_("!! MentoHUST已经运行(PID=%d)!\n"), fl.l_pid);
 		exit(EXIT_FAILURE);
-	}
-	if (daemonMode) {	/* 貌似我过早进入后台模式了，就给个选项保留输出或者输出到文件吧 */
-		print_log(_(">> 进入后台运行模式，使用参数-k可退出认证。\n"));
-#ifndef __UCLIBC__
-		if (daemon(0, (daemonMode+1)%2))
-#else
-		if (uclibc_daemon(0, (daemonMode+1)%2))
-#endif
-			perror(_("!! 后台运行失败"));
-		else if (daemonMode == 3) {
-			freopen(LOG_FILE, "a", stdout);
-			setvbuf(stdout, (char *)NULL, _IOLBF, BUFSIZ);
-			freopen(LOG_FILE, "a", stderr);
-		}
 	}
 	fl.l_type = F_WRLCK;
 	fl.l_pid = getpid();
