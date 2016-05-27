@@ -71,6 +71,7 @@ void set_log_destination(LOG_DEST dst) {
 		case LOG_TO_FILE:
 			if (g_log_fp == NULL || g_log_fp == stdout) {
 				g_log_fp = fopen(g_log_path, "a");
+				setvbuf(g_log_fp, NULL, _IOLBF, BUFSIZ);
 			}
 			break;
 	}
