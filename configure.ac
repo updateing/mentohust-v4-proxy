@@ -7,7 +7,7 @@ AC_CANONICAL_HOST
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([src/myconfig.h])
 AC_CONFIG_HEADERS([config.h])
-AC_DEFINE_UNQUOTED(CREDIT_ADDITION, "V4 Algorithm by Hu Yunrui 2015-2016.\nNew features by Hamster Tian 2015-2016.", Credits to newer contributors)
+AC_DEFINE_UNQUOTED(CREDIT_ADDITION, "V4 Algorithm by Hu Yunrui 2015-2016.\n802.1x proxy and other new features by Hamster Tian 2015-2016.", Credits to newer contributors)
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
