@@ -911,22 +911,39 @@ static void applyDaemonMode(int daemonMode) {
 	}
 }
 
-static void checkRunningInstance(int exitFlag)
+static void acquirePidFileLock(struct flock* fl)
 {
-	struct flock fl;
-	lockfd = open (LOCK_FILE, O_RDWR|O_CREAT, LOCKMODE);
 	if (lockfd < 0) {
-		perror(_("!! 打开锁文件失败"));
-		goto error_exit;
+		lockfd = open (LOCK_FILE, O_RDWR|O_CREAT, LOCKMODE);
+		if (lockfd < 0) {
+			perror(_("!! 打开锁文件失败"));
+			goto error_exit;
+		}
 	}
-	fl.l_start = 0;
-	fl.l_whence = SEEK_SET;
-	fl.l_len = 0;
-	fl.l_type = F_WRLCK;
-	if (fcntl(lockfd, F_GETLK, &fl) < 0) {
+	fl->l_start = 0;
+	fl->l_whence = SEEK_SET;
+	fl->l_len = 0;
+	fl->l_type = F_WRLCK;
+	if (fcntl(lockfd, F_GETLK, fl) < 0) {
 		perror(_("!! 获取文件锁失败"));
 		goto error_exit;
 	}
+	return;
+
+error_exit:
+#ifndef NO_NOTIFY
+	if (showNotify && show_notify(_("MentoHUST - 错误提示"),
+		_("操作锁文件失败，请检查是否为root权限！"), 1000*showNotify) < 0)
+		showNotify = 0;
+#endif
+	exit(EXIT_FAILURE);
+}
+
+static void checkRunningInstance(int exitFlag)
+{
+	struct flock fl;
+	acquirePidFileLock(&fl);
+
 	if (exitFlag) {
 		if (fl.l_type != F_UNLCK) {
 			printf(_(">> 已发送退出信号给MentoHUST进程(PID=%d).\n"), fl.l_pid);
@@ -943,33 +960,12 @@ static void checkRunningInstance(int exitFlag)
 		exit(EXIT_FAILURE);
 	}
 	return;
-
-error_exit:
-#ifndef NO_NOTIFY
-	if (showNotify && show_notify(_("MentoHUST - 错误提示"),
-		_("操作锁文件失败，请检查是否为root权限！"), 1000*showNotify) < 0)
-		showNotify = 0;
-#endif
-	exit(EXIT_FAILURE);
 }
 
 static void lockPidFile() {
 	struct flock fl;
-	if (lockfd < 0) {
-		lockfd = open (LOCK_FILE, O_RDWR|O_CREAT, LOCKMODE);
-		if (lockfd < 0) {
-			perror(_("!! 打开锁文件失败"));
-			goto error_exit;
-		}
-	}
-	fl.l_start = 0;
-	fl.l_whence = SEEK_SET;
-	fl.l_len = 0;
-	fl.l_type = F_WRLCK;
-	if (fcntl(lockfd, F_GETLK, &fl) < 0) {
-		perror(_("!! 获取文件锁失败"));
-		goto error_exit;
-	}
+	acquirePidFileLock(&fl);
+
 	fl.l_type = F_WRLCK;
 	fl.l_pid = getpid();
 	if (fcntl(lockfd, F_SETLKW, &fl) < 0) {
