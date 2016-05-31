@@ -44,6 +44,7 @@ static const char *CREDIT_ADDITION = "V4 Algorithm by Hu Yunrui, new features by
 #define D_DAEMONMODE		0	/* 默认daemon模式 */
 #define D_MAXFAIL			8	/* 默认允许失败次数 */
 #define D_RESTARTONLOGOFF	1	/* 默认掉线后重连 */
+#define D_MAXRETRIES		0	/* 默认认证服务器无响应时允许重试的次数,0为无限 */
 #define D_PROXYMODE     	0	/* 默认禁用代理模式 */
 #define D_SUCCESS_COUNT    	1	/* 默认代理需求成功次数 */
 
@@ -85,6 +86,7 @@ unsigned startMode = D_STARTMODE;	/* 组播模式 */
 unsigned dhcpMode = D_DHCPMODE;	/* DHCP模式 */
 unsigned maxFail = D_MAXFAIL;	/* 允许失败次数 */
 unsigned restartOnLogOff = D_RESTARTONLOGOFF; /* 掉线后是否重连 */
+unsigned maxRetries = D_MAXRETRIES; /* 认证服务器无响应时最大重试次数 */
 unsigned proxyMode = D_PROXYMODE;	/* 代理模式开关 */
 unsigned proxyRequireSuccessCount = D_SUCCESS_COUNT; /* 关闭监听前需要收到的Success次数 */
 pcap_t *hPcap = NULL;	/* 用于发出认证数据包的Pcap句柄（WAN） */
@@ -363,6 +365,7 @@ static int readConfigFile(int *daemonMode)
 	*daemonMode = getInt(buf, "MentoHUST", "DaemonMode", D_DAEMONMODE) % 4;
 	restartOnLogOff = getInt(buf, "MentoHUST", "RestartOnLogOff", D_RESTARTONLOGOFF);
 	maxFail = getInt(buf, "MentoHUST", "MaxFail", D_MAXFAIL);
+	maxRetries = getInt(buf, "MentoHUST", "MaxRetries", D_MAXRETRIES);
 	free(buf);
 	return 0;
 }
@@ -407,6 +410,7 @@ static void readArg(char argc, char **argv, int *saveFlag, int *exitFlag, int *d
 	    { "proxy-lan-iface", required_argument, NULL, 'z' },
 	    { "proxy-require-success", required_argument, NULL, 'j' },
 	    { "decode-config", required_argument, NULL, 'q' },
+	    { "max-retries", required_argument, NULL, 0},
 	    { NULL, no_argument, NULL, 0 }
     };
 
@@ -505,6 +509,12 @@ static void readArg(char argc, char **argv, int *saveFlag, int *exitFlag, int *d
             case 'q':
                 printSuConfig(optarg);
                 exit(EXIT_SUCCESS);
+            case 0: /* 超出26个字母的选项，没有短选项与其对应 */
+#define IF_ARG(arg_name) (strcmp(longOpts[longIndex].name, arg_name) == 0)
+                if (IF_ARG("max-retries")) {
+                    maxRetries = atoi(optarg);
+                }
+                break;
             default:
                 break;
         }
@@ -711,6 +721,10 @@ static void showHelp(const char *fileName)
         "\t--decode-config"
 #endif
 		"\t-q 显示SuConfig.dat的内容(如-q/path/SuConfig.dat)\n"
+#ifndef NO_GETOPT_LONG
+		/* 从这里开始就是必须使用长选项的参数了 */
+		"\t--max-retries 在得到认证成功或失败的结果前，最多重试的次数，0表示无限重试 [默认0]\n"
+#endif
 		"例如:\t%s -u username -p password -n eth0 -i 192.168.0.1 -m 255.255.255.0 -g 0.0.0.0 -s 0.0.0.0 -o 0.0.0.0 -t 8 -e 30 -r 15 -a 0 -d 1 -b 0 -v 4.10 -f default.mpf -c dhclient\n"
 		"关于代理模式：此模式下MentoHUST将不会自己发起认证，而是修改LAN内捕获到的认证数据包的源MAC并转发至WAN，使得本机认证通过。\n"
 		"代理模式下用户名、密码、掉线重连方式（-u、-p、-x）无效，可不指定。由于Start包为自行构造，仍然需要指定DHCP方式和组播地址（-d、-a）。\n"
@@ -789,6 +803,10 @@ static void printConfig()
 	print_log(_("** 失败等待:\t%u秒\n"), restartWait);
 	if (maxFail)
 		print_log(_("** 允许失败:\t%u次\n"), maxFail);
+	if (maxRetries > 0)
+		print_log(_("** 允许重试:\t%u次\n"), maxRetries);
+	else
+		print_log(_("** 允许重试:\t无限\n"));
 	print_log(_("** 组播地址:\t%s\n"), addr[startMode]);
 	print_log(_("** DHCP方式:\t%s\n"), dhcp[dhcpMode]);
 #ifndef NO_NOTIFY
@@ -873,6 +891,7 @@ static void saveConfig(int daemonMode)
 	setInt(&buf, "MentoHUST", "RestartWait", restartWait);
 	setInt(&buf, "MentoHUST", "EchoInterval", echoInterval);
 	setInt(&buf, "MentoHUST", "Timeout", timeout);
+	setInt(&buf, "MentoHUST", "MaxRetries", maxRetries);
 	setString(&buf, "MentoHUST", "PingHost", formatIP(pingHost));
 	setString(&buf, "MentoHUST", "DNS", formatIP(dns));
 	setString(&buf, "MentoHUST", "Gateway", formatIP(gateway));

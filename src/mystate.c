@@ -32,6 +32,7 @@ volatile int state = ID_DISCONNECT;	/* 认证状态 */
 const u_char *capBuf = NULL;	/* 抓到的包 */
 static u_char sendPacket[0x3E8];	/* 用来发送的包 */
 static int sendCount = 0;	/* 同一阶段发包计数 */
+static int continousRestartCount = 0; /* 超时后已连续重启次数 */
 int proxyClientRequested = 0; /* 是否有客户端发起认证 */
 int proxySuccessCount = 0; /* 目前收到认证成功的次数 */
 
@@ -49,6 +50,7 @@ extern pcap_t *hPcap;
 extern u_char *fillBuf;
 extern unsigned fillSize;
 extern u_int32_t pingHost;
+extern unsigned maxRetries;
 extern unsigned proxyMode;
 #ifndef NO_ARP
 extern u_int32_t rip, gateway;
@@ -305,6 +307,10 @@ int switchState(int type)
 		case ID_WAITECHO:
 			print_log(_(">> 等候响应包超时，自行响应!\n"));
 			return switchState(ID_ECHO);
+		}
+		if (maxRetries > 0 && ++continousRestartCount >= maxRetries) {
+		    print_log(_("!! 已经重启%d次，达到预设上限，将退出认证!\n"), continousRestartCount);
+		    exit(EXIT_FAILURE);
 		}
 		return restart();
 	}
